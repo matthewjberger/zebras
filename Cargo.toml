@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 nightshade = "0.6.8"
+reqwest = { version = "0.12", features = ["blocking"] }
+image = "0.25"
