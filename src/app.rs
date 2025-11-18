@@ -1003,109 +1003,6 @@ impl State for Zebras {
             });
         });
 
-        if let Some(ref status) = self.parsed_status {
-            let mut should_clear = false;
-
-            egui::Window::new("Printer Status")
-                .resizable(true)
-                .default_width(550.0)
-                .default_height(400.0)
-                .show(ui_context, |ui| {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.heading("Status Summary");
-                            ui.separator();
-                            ui.add_space(8.0);
-
-                            if status.is_ok() {
-                                ui.label(egui::RichText::new("✓ Printer is operating normally")
-                                    .color(egui::Color32::GREEN)
-                                    .size(18.0)
-                                    .strong());
-                            } else {
-                                if status.has_errors() {
-                                    ui.label(egui::RichText::new("⚠ ERRORS DETECTED")
-                                        .color(egui::Color32::RED)
-                                        .size(18.0)
-                                        .strong());
-                                    ui.add_space(12.0);
-                                    for error in status.errors.to_descriptions() {
-                                        ui.horizontal(|ui| {
-                                            ui.label(egui::RichText::new("•").color(egui::Color32::RED).size(16.0));
-                                            ui.label(egui::RichText::new(error).color(egui::Color32::RED).size(14.0));
-                                        });
-                                        ui.add_space(4.0);
-                                    }
-                                    ui.add_space(16.0);
-                                }
-
-                                if status.has_warnings() {
-                                    ui.label(egui::RichText::new("⚠ Warnings")
-                                        .color(egui::Color32::YELLOW)
-                                        .size(18.0)
-                                        .strong());
-                                    ui.add_space(12.0);
-                                    for warning in status.warnings.to_descriptions() {
-                                        ui.horizontal(|ui| {
-                                            ui.label(egui::RichText::new("•").color(egui::Color32::YELLOW).size(16.0));
-                                            ui.label(egui::RichText::new(warning).color(egui::Color32::YELLOW).size(14.0));
-                                        });
-                                        ui.add_space(4.0);
-                                    }
-                                }
-                            }
-                        });
-
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        if ui.button("Close").clicked() {
-                            should_clear = true;
-                        }
-                    });
-                });
-
-            if should_clear {
-                self.parsed_status = None;
-            }
-        }
-
-        if self.query_response.is_some() {
-            let response_text = self.query_response.clone().unwrap();
-            let mut should_clear = false;
-            let mut should_copy = false;
-
-            egui::Window::new("Printer Query Response")
-                .resizable(true)
-                .default_width(600.0)
-                .show(ui_context, |ui| {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.add(
-                                egui::TextEdit::multiline(&mut response_text.as_str())
-                                    .code_editor()
-                                    .desired_width(f32::INFINITY)
-                                    .interactive(false)
-                            );
-                        });
-                    if ui.button("Clear").clicked() {
-                        should_clear = true;
-                    }
-                    if ui.button("Copy").clicked() {
-                        should_copy = true;
-                    }
-                });
-
-            if should_clear {
-                self.query_response = None;
-            }
-            if should_copy {
-                ui_context.copy_text(response_text);
-            }
-        }
-
         egui::CentralPanel::default().show(ui_context, |ui| {
             ui.columns(2, |columns| {
                 columns[0].vertical(|ui| {
@@ -1320,6 +1217,111 @@ impl State for Zebras {
                             ui.centered_and_justified(|ui| {
                                 ui.label("Loading...");
                             });
+                        }
+
+                        if let Some(ref status) = self.parsed_status {
+                            let mut clear_status = false;
+
+                            ui.add_space(20.0);
+                            ui.separator();
+                            ui.add_space(10.0);
+
+                            ui.horizontal(|ui| {
+                                ui.heading("Printer Status");
+                                if ui.button("Clear").clicked() {
+                                    clear_status = true;
+                                }
+                            });
+                            ui.separator();
+                            ui.add_space(8.0);
+
+                            egui::ScrollArea::vertical()
+                                .max_height(300.0)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    if status.is_ok() {
+                                        ui.label(egui::RichText::new("✓ Printer is operating normally")
+                                            .color(egui::Color32::GREEN)
+                                            .size(16.0)
+                                            .strong());
+                                    } else {
+                                        if status.has_errors() {
+                                            ui.label(egui::RichText::new("⚠ ERRORS DETECTED")
+                                                .color(egui::Color32::RED)
+                                                .size(16.0)
+                                                .strong());
+                                            ui.add_space(10.0);
+                                            for error in status.errors.to_descriptions() {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(egui::RichText::new("•").color(egui::Color32::RED).size(14.0));
+                                                    ui.label(egui::RichText::new(error).color(egui::Color32::RED).size(13.0));
+                                                });
+                                                ui.add_space(3.0);
+                                            }
+                                            ui.add_space(12.0);
+                                        }
+
+                                        if status.has_warnings() {
+                                            ui.label(egui::RichText::new("⚠ Warnings")
+                                                .color(egui::Color32::YELLOW)
+                                                .size(16.0)
+                                                .strong());
+                                            ui.add_space(10.0);
+                                            for warning in status.warnings.to_descriptions() {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(egui::RichText::new("•").color(egui::Color32::YELLOW).size(14.0));
+                                                    ui.label(egui::RichText::new(warning).color(egui::Color32::YELLOW).size(13.0));
+                                                });
+                                                ui.add_space(3.0);
+                                            }
+                                        }
+                                    }
+                                });
+
+                            if clear_status {
+                                self.parsed_status = None;
+                            }
+                        }
+
+                        if self.query_response.is_some() {
+                            let response_text = self.query_response.clone().unwrap();
+                            let mut clear_response = false;
+                            let mut copy_response = false;
+
+                            ui.add_space(20.0);
+                            ui.separator();
+                            ui.add_space(10.0);
+
+                            ui.horizontal(|ui| {
+                                ui.heading("Query Response");
+                                if ui.button("Clear").clicked() {
+                                    clear_response = true;
+                                }
+                                if ui.button("Copy").clicked() {
+                                    copy_response = true;
+                                }
+                            });
+                            ui.separator();
+                            ui.add_space(8.0);
+
+                            egui::ScrollArea::vertical()
+                                .max_height(300.0)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut response_text.as_str())
+                                            .code_editor()
+                                            .desired_width(f32::INFINITY)
+                                            .interactive(false)
+                                    );
+                                });
+
+                            if clear_response {
+                                self.query_response = None;
+                            }
+                            if copy_response {
+                                ui.ctx().copy_text(response_text);
+                            }
                         }
                     });
             });
