@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::labelary::LabelaryClient;
 use crate::printer::ZplPrinter;
-use crate::printer_status::PrinterStatus;
+use crate::printer_status::{PrinterStatus, PrinterInfo};
 use crate::zpl::{commands_to_zpl, parse_graphic_field_from_zpl, FieldOrientation, FontOrientation, ZplCommand};
 
 pub struct Zebras {
@@ -29,6 +29,7 @@ pub struct Zebras {
     query_response: Option<String>,
     is_querying: bool,
     parsed_status: Option<PrinterStatus>,
+    printer_info: PrinterInfo,
     last_query_type: Option<String>,
     cutting_enabled: bool,
     show_query_window: bool,
@@ -91,6 +92,7 @@ impl Default for Zebras {
             query_response: None,
             is_querying: false,
             parsed_status: None,
+            printer_info: PrinterInfo::default(),
             last_query_type: None,
             cutting_enabled: false,
             show_query_window: false,
@@ -504,6 +506,74 @@ impl Zebras {
         }
     }
 
+    fn query_all(&mut self, ui_context: &egui::Context) {
+        if let Some(idx) = self.selected_printer {
+            if let Some(printer) = self.printers.get(idx).cloned() {
+                self.is_querying = true;
+                self.query_response = Some("Querying all printer information...".to_string());
+                self.last_query_type = Some("ALL".to_string());
+
+                let ctx = ui_context.clone();
+                let pending_result = Arc::clone(&self.pending_query_result);
+
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    std::thread::spawn(move || {
+                        let mut all_results = String::new();
+
+                        all_results.push_str("=== PRINTER STATUS ===\n");
+                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQES\r\n") {
+                            all_results.push_str(&response);
+                            all_results.push_str("\n\n");
+                        }
+
+                        all_results.push_str("=== SERIAL NUMBER ===\n");
+                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQSN\r\n") {
+                            all_results.push_str(&response);
+                            all_results.push_str("\n\n");
+                        }
+
+                        all_results.push_str("=== HARDWARE ADDRESS ===\n");
+                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQHA\r\n") {
+                            all_results.push_str(&response);
+                            all_results.push_str("\n\n");
+                        }
+
+                        all_results.push_str("=== ODOMETER ===\n");
+                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQOD\r\n") {
+                            all_results.push_str(&response);
+                            all_results.push_str("\n\n");
+                        }
+
+                        all_results.push_str("=== PRINTHEAD LIFE ===\n");
+                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQPH\r\n") {
+                            all_results.push_str(&response);
+                            all_results.push_str("\n\n");
+                        }
+
+                        all_results.push_str("=== PLUG AND PLAY ===\n");
+                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQPP\r\n") {
+                            all_results.push_str(&response);
+                        }
+
+                        if let Ok(mut guard) = pending_result.lock() {
+                            *guard = Some(Ok(all_results));
+                        }
+                        ctx.request_repaint();
+                    });
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    self.query_response = Some("Printer queries not available in WASM".to_string());
+                    self.is_querying = false;
+                }
+            }
+        } else {
+            self.query_response = Some("No printer selected".to_string());
+        }
+    }
+
     fn render_zpl(&mut self, ui_context: &egui::Context) {
         self.error_message = None;
         self.is_loading = true;
@@ -883,20 +953,80 @@ impl State for Zebras {
             match query_result {
                 Ok(response) => {
                     if let Some(ref query_type) = self.last_query_type {
-                        if query_type == "ES" {
-                            match PrinterStatus::parse(&response) {
-                                Ok(status) => {
-                                    self.parsed_status = Some(status);
-                                    self.query_response = None;
-                                }
-                                Err(e) => {
-                                    self.query_response = Some(format!("Failed to parse status: {}\n\nRaw response:\n{}", e, response));
-                                    self.parsed_status = None;
+                        match query_type.as_str() {
+                            "ES" => {
+                                match PrinterStatus::parse(&response) {
+                                    Ok(status) => {
+                                        self.parsed_status = Some(status);
+                                        self.query_response = None;
+                                    }
+                                    Err(e) => {
+                                        self.query_response = Some(format!("Failed to parse status: {}\n\nRaw response:\n{}", e, response));
+                                        self.parsed_status = None;
+                                    }
                                 }
                             }
-                        } else {
-                            self.query_response = Some(response);
-                            self.parsed_status = None;
+                            "SN" => {
+                                self.printer_info.serial_number = PrinterInfo::parse_serial_number(&response);
+                                self.query_response = Some(response);
+                                self.parsed_status = None;
+                            }
+                            "HA" => {
+                                self.printer_info.hardware_address = PrinterInfo::parse_hardware_address(&response);
+                                self.query_response = Some(response);
+                                self.parsed_status = None;
+                            }
+                            "OD" => {
+                                self.printer_info.odometer = PrinterInfo::parse_odometer(&response);
+                                self.query_response = Some(response);
+                                self.parsed_status = None;
+                            }
+                            "PH" => {
+                                self.printer_info.printhead_life = PrinterInfo::parse_printhead_life(&response);
+                                self.query_response = Some(response);
+                                self.parsed_status = None;
+                            }
+                            "PP" => {
+                                self.printer_info.plug_and_play = PrinterInfo::parse_plug_and_play(&response);
+                                self.query_response = Some(response);
+                                self.parsed_status = None;
+                            }
+                            "ALL" => {
+                                let sections: Vec<&str> = response.split("===").collect();
+                                for section in sections {
+                                    if section.contains("PRINTER STATUS") {
+                                        let status_part = section.split("===").next().unwrap_or("");
+                                        if let Ok(status) = PrinterStatus::parse(status_part) {
+                                            self.parsed_status = Some(status);
+                                        }
+                                    } else if section.contains("SERIAL NUMBER") {
+                                        let lines: Vec<&str> = section.lines().skip(1).collect();
+                                        let data = lines.join("\n");
+                                        self.printer_info.serial_number = PrinterInfo::parse_serial_number(&data);
+                                    } else if section.contains("HARDWARE ADDRESS") {
+                                        let lines: Vec<&str> = section.lines().skip(1).collect();
+                                        let data = lines.join("\n");
+                                        self.printer_info.hardware_address = PrinterInfo::parse_hardware_address(&data);
+                                    } else if section.contains("ODOMETER") {
+                                        let lines: Vec<&str> = section.lines().skip(1).collect();
+                                        let data = lines.join("\n");
+                                        self.printer_info.odometer = PrinterInfo::parse_odometer(&data);
+                                    } else if section.contains("PRINTHEAD LIFE") {
+                                        let lines: Vec<&str> = section.lines().skip(1).collect();
+                                        let data = lines.join("\n");
+                                        self.printer_info.printhead_life = PrinterInfo::parse_printhead_life(&data);
+                                    } else if section.contains("PLUG AND PLAY") {
+                                        let lines: Vec<&str> = section.lines().skip(1).collect();
+                                        let data = lines.join("\n");
+                                        self.printer_info.plug_and_play = PrinterInfo::parse_plug_and_play(&data);
+                                    }
+                                }
+                                self.query_response = Some(response);
+                            }
+                            _ => {
+                                self.query_response = Some(response);
+                                self.parsed_status = None;
+                            }
                         }
                     } else {
                         self.query_response = Some(response);
@@ -1261,9 +1391,13 @@ impl State for Zebras {
                     let query_button_enabled = self.selected_printer.is_some() && !self.is_querying;
 
                     ui.horizontal(|ui| {
-                        ui.label("Select query type:");
+                        if ui.add_enabled(query_button_enabled, egui::Button::new("Query All")).clicked() {
+                            self.query_all(ui.ctx());
+                        }
+
+                        ui.label("Or select individual:");
                         egui::ComboBox::from_id_salt(ui.next_auto_id())
-                            .selected_text("Select Query...")
+                            .selected_text("Select...")
                             .show_ui(ui, |ui| {
                                 if ui.add_enabled(query_button_enabled, egui::Button::new("Printer Status (ES)")).clicked() {
                                     self.query_printer("ES", ui.ctx());
@@ -1351,6 +1485,63 @@ impl State for Zebras {
 
                                 if clear_status {
                                     self.parsed_status = None;
+                                }
+                            }
+
+                            let has_printer_info = self.printer_info.serial_number.is_some()
+                                || self.printer_info.hardware_address.is_some()
+                                || self.printer_info.odometer.is_some()
+                                || self.printer_info.printhead_life.is_some()
+                                || self.printer_info.plug_and_play.is_some();
+
+                            if has_printer_info {
+                                let mut clear_info = false;
+
+                                ui.horizontal(|ui| {
+                                    ui.heading("Printer Information");
+                                    if ui.button("Clear").clicked() {
+                                        clear_info = true;
+                                    }
+                                });
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                if let Some(ref serial) = self.printer_info.serial_number {
+                                    ui.label(egui::RichText::new("Serial Number:").strong());
+                                    ui.label(serial);
+                                    ui.add_space(8.0);
+                                }
+
+                                if let Some(ref mac) = self.printer_info.hardware_address {
+                                    ui.label(egui::RichText::new("Hardware Address (MAC):").strong());
+                                    ui.label(mac);
+                                    ui.add_space(8.0);
+                                }
+
+                                if let Some(ref odometer) = self.printer_info.odometer {
+                                    ui.label(egui::RichText::new("Odometer:").strong());
+                                    ui.label(format!("Total Print Length: {}", odometer.total_print_length));
+                                    ui.label(format!("Total Labels: {}", odometer.total_labels));
+                                    ui.add_space(8.0);
+                                }
+
+                                if let Some(ref printhead) = self.printer_info.printhead_life {
+                                    ui.label(egui::RichText::new("Printhead Life:").strong());
+                                    ui.label(format!("Used Inches: {}", printhead.used_inches));
+                                    ui.label(format!("Total Labels: {}", printhead.total_labels));
+                                    ui.add_space(8.0);
+                                }
+
+                                if let Some(ref pnp) = self.printer_info.plug_and_play {
+                                    ui.label(egui::RichText::new("Plug and Play Info:").strong());
+                                    ui.label(pnp);
+                                    ui.add_space(8.0);
+                                }
+
+                                ui.add_space(15.0);
+
+                                if clear_info {
+                                    self.printer_info = PrinterInfo::default();
                                 }
                             }
 

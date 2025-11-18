@@ -1,5 +1,98 @@
 use std::fmt;
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PrinterInfo {
+    pub serial_number: Option<String>,
+    pub hardware_address: Option<String>,
+    pub odometer: Option<OdometerInfo>,
+    pub printhead_life: Option<PrintheadInfo>,
+    pub plug_and_play: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OdometerInfo {
+    pub total_print_length: String,
+    pub total_labels: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrintheadInfo {
+    pub used_inches: String,
+    pub total_labels: String,
+}
+
+impl PrinterInfo {
+    pub fn parse_serial_number(response: &str) -> Option<String> {
+        for line in response.lines() {
+            let line = line.trim();
+            if line.starts_with('"') && line.ends_with('"') {
+                return Some(line.trim_matches('"').to_string());
+            }
+            if !line.is_empty() && !line.starts_with('<') {
+                return Some(line.to_string());
+            }
+        }
+        None
+    }
+
+    pub fn parse_hardware_address(response: &str) -> Option<String> {
+        for line in response.lines() {
+            let line = line.trim();
+            if line.len() == 12 && line.chars().all(|c| c.is_ascii_hexdigit()) {
+                let formatted = format!(
+                    "{}:{}:{}:{}:{}:{}",
+                    &line[0..2], &line[2..4], &line[4..6],
+                    &line[6..8], &line[8..10], &line[10..12]
+                );
+                return Some(formatted);
+            }
+            if !line.is_empty() && !line.starts_with('<') {
+                return Some(line.to_string());
+            }
+        }
+        None
+    }
+
+    pub fn parse_odometer(response: &str) -> Option<OdometerInfo> {
+        let lines: Vec<&str> = response.lines().collect();
+        if lines.len() >= 2 {
+            let print_length = lines[0].trim().to_string();
+            let labels = lines[1].trim().to_string();
+            return Some(OdometerInfo {
+                total_print_length: print_length,
+                total_labels: labels,
+            });
+        }
+        None
+    }
+
+    pub fn parse_printhead_life(response: &str) -> Option<PrintheadInfo> {
+        let lines: Vec<&str> = response.lines().collect();
+        if lines.len() >= 2 {
+            let used_inches = lines[0].trim().to_string();
+            let labels = lines[1].trim().to_string();
+            return Some(PrintheadInfo {
+                used_inches,
+                total_labels: labels,
+            });
+        }
+        None
+    }
+
+    pub fn parse_plug_and_play(response: &str) -> Option<String> {
+        let cleaned: String = response.lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !cleaned.is_empty() {
+            Some(cleaned)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrinterStatus {
     pub errors: ErrorFlags,
