@@ -4,6 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nightshade = "0.6.8"
-reqwest = { version = "0.12", features = ["blocking"] }
+nightshade = "0.6.9"
 image = "0.25"
+enum2str = "0.1.18"
+rfd = "0.15"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.12", features = ["blocking", "multipart"] }
+local-ip-address = "0.6"
+serialport = "4.5"
+arboard = "3.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest-wasm = "0.11"
+wasm-bindgen-futures = "0.4"
