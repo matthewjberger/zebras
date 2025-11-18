@@ -572,7 +572,7 @@ impl Zebras {
             ZplCommand::FieldData { data } => {
                 ui.horizontal(|ui| {
                     ui.label("Text:");
-                    if ui.text_edit_singleline(data).changed() {
+                    if ui.text_edit_singleline(data).lost_focus() {
                         self.is_dirty = true;
                     }
                 });
@@ -612,7 +612,7 @@ impl Zebras {
                     });
                     ui.horizontal(|ui| {
                         ui.label("Data (hex):");
-                        if ui.text_edit_singleline(data).changed() {
+                        if ui.text_edit_singleline(data).lost_focus() {
                             self.is_dirty = true;
                         }
                     });
@@ -1059,7 +1059,7 @@ impl State for Zebras {
                                             .code_editor()
                                             .desired_width(f32::INFINITY)
                                             .desired_rows(25)
-                                    ).changed() {
+                                    ).lost_focus() {
                                         self.is_dirty = true;
                                     }
                                 });
