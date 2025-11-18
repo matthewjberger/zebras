@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::labelary::LabelaryClient;
 use crate::printer::ZplPrinter;
+use crate::printer_status::PrinterStatus;
 use crate::zpl::{commands_to_zpl, parse_graphic_field_from_zpl, FieldOrientation, FontOrientation, ZplCommand};
 
 pub struct Zebras {
@@ -22,10 +23,13 @@ pub struct Zebras {
     is_scanning: bool,
     print_status: Option<String>,
     manual_ip: String,
-    manual_serial_port: String,
-    manual_baud_rate: String,
     image_load_status: Option<String>,
     graphic_threshold: u8,
+    pending_query_result: Arc<Mutex<Option<Result<String, String>>>>,
+    query_response: Option<String>,
+    is_querying: bool,
+    parsed_status: Option<PrinterStatus>,
+    last_query_type: Option<String>,
 }
 
 impl Default for Zebras {
@@ -79,10 +83,13 @@ impl Default for Zebras {
             is_scanning: false,
             print_status: None,
             manual_ip: String::new(),
-            manual_serial_port: String::new(),
-            manual_baud_rate: "9600".to_string(),
             image_load_status: None,
             graphic_threshold: 128,
+            pending_query_result: Arc::new(Mutex::new(None)),
+            query_response: None,
+            is_querying: false,
+            parsed_status: None,
+            last_query_type: None,
         }
     }
 }
@@ -361,9 +368,7 @@ impl Zebras {
             let result = self.pending_scan_result.clone();
 
             thread::spawn(move || {
-                let mut printers = crate::printer::scan_for_printers();
-                let serial_printers = crate::printer::scan_for_serial_printers();
-                printers.extend(serial_printers);
+                let printers = crate::printer::scan_for_printers();
                 if let Ok(mut guard) = result.lock() {
                     *guard = Some(printers);
                 }
@@ -410,7 +415,7 @@ impl Zebras {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let printer = ZplPrinter::new_tcp(ip.to_string(), 9100);
+            let printer = ZplPrinter::new(ip.to_string(), 9100);
 
             if !self.printers.iter().any(|p| p.ip == ip) {
                 self.printers.push(printer);
@@ -422,34 +427,36 @@ impl Zebras {
         }
     }
 
-    fn add_manual_serial_printer(&mut self) {
-        let port = self.manual_serial_port.trim();
-        let baud_str = self.manual_baud_rate.trim();
+    fn query_printer(&mut self, query_type: &str, ui_context: &egui::Context) {
+        if let Some(idx) = self.selected_printer {
+            if let Some(printer) = self.printers.get(idx).cloned() {
+                self.is_querying = true;
+                self.query_response = Some("Querying printer...".to_string());
+                self.last_query_type = Some(query_type.to_string());
 
-        if port.is_empty() {
-            self.print_status = Some("Please enter a serial port".to_string());
-            return;
-        }
+                let query = format!("~HQ{}\r\n", query_type);
+                let ctx = ui_context.clone();
+                let pending_result = Arc::clone(&self.pending_query_result);
 
-        let baud_rate = match baud_str.parse::<u32>() {
-            Ok(rate) => rate,
-            Err(_) => {
-                self.print_status = Some("Invalid baud rate".to_string());
-                return;
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    std::thread::spawn(move || {
+                        let response = crate::printer::query_printer(&printer, &query);
+                        if let Ok(mut guard) = pending_result.lock() {
+                            *guard = Some(response);
+                        }
+                        ctx.request_repaint();
+                    });
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    self.query_response = Some("Printer queries not available in WASM".to_string());
+                    self.is_querying = false;
+                }
             }
-        };
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let printer = ZplPrinter::new_serial(port.to_string(), baud_rate);
-
-            if !self.printers.iter().any(|p| p.serial_port == port) {
-                self.printers.push(printer);
-                self.print_status = Some(format!("Added printer at {}", port));
-                self.manual_serial_port.clear();
-            } else {
-                self.print_status = Some(format!("Printer at {} already exists", port));
-            }
+        } else {
+            self.query_response = Some("No printer selected".to_string());
         }
     }
 
@@ -806,10 +813,7 @@ impl State for Zebras {
                 let mut added_count = 0;
                 for scanned in scanned_printers.drain(..) {
                     let already_exists = self.printers.iter().any(|existing| {
-                        match scanned.connection_type {
-                            crate::printer::ConnectionType::Tcp => existing.ip == scanned.ip && !scanned.ip.is_empty(),
-                            crate::printer::ConnectionType::Serial => existing.serial_port == scanned.serial_port && !scanned.serial_port.is_empty(),
-                        }
+                        existing.ip == scanned.ip && !scanned.ip.is_empty()
                     });
                     if !already_exists {
                         self.printers.push(scanned);
@@ -820,6 +824,44 @@ impl State for Zebras {
                     self.print_status = Some(format!("Found {} new printer(s)", added_count));
                 } else {
                     self.print_status = Some("No new printers found".to_string());
+                }
+            }
+        }
+
+        let pending_query = if let Ok(mut guard) = self.pending_query_result.try_lock() {
+            guard.take()
+        } else {
+            None
+        };
+
+        if let Some(query_result) = pending_query {
+            self.is_querying = false;
+            match query_result {
+                Ok(response) => {
+                    if let Some(ref query_type) = self.last_query_type {
+                        if query_type == "ES" {
+                            match PrinterStatus::parse(&response) {
+                                Ok(status) => {
+                                    self.parsed_status = Some(status);
+                                    self.query_response = None;
+                                }
+                                Err(e) => {
+                                    self.query_response = Some(format!("Failed to parse status: {}\n\nRaw response:\n{}", e, response));
+                                    self.parsed_status = None;
+                                }
+                            }
+                        } else {
+                            self.query_response = Some(response);
+                            self.parsed_status = None;
+                        }
+                    } else {
+                        self.query_response = Some(response);
+                        self.parsed_status = None;
+                    }
+                }
+                Err(e) => {
+                    self.query_response = Some(format!("Query error: {}", e));
+                    self.parsed_status = None;
                 }
             }
         }
@@ -898,20 +940,6 @@ impl State for Zebras {
                     }
                 });
 
-                ui.horizontal(|ui| {
-                    ui.label("Serial Port:");
-                    let port_response = ui.text_edit_singleline(&mut self.manual_serial_port);
-
-                    ui.label("Baud:");
-                    ui.add_sized([60.0, 20.0], egui::TextEdit::singleline(&mut self.manual_baud_rate));
-
-                    let enter_pressed = port_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-
-                    if ui.button("Add").clicked() || enter_pressed {
-                        self.add_manual_serial_printer();
-                    }
-                });
-
                 if !self.printers.is_empty() {
                     let selected_text = if let Some(idx) = self.selected_printer {
                         self.printers[idx].name.as_str()
@@ -932,6 +960,37 @@ impl State for Zebras {
                     if ui.add_enabled(self.selected_printer.is_some(), egui::Button::new("Send to Printer")).clicked() {
                         self.send_to_printer();
                     }
+
+                    ui.separator();
+
+                    ui.label("Query:");
+                    let query_button_enabled = self.selected_printer.is_some() && !self.is_querying;
+                    egui::ComboBox::from_id_salt("query_selector")
+                        .selected_text("Select Query...")
+                        .show_ui(ui, |ui| {
+                            if ui.add_enabled(query_button_enabled, egui::Button::new("Printer Status (ES)")).clicked() {
+                                self.query_printer("ES", ui.ctx());
+                            }
+                            if ui.add_enabled(query_button_enabled, egui::Button::new("Serial Number (SN)")).clicked() {
+                                self.query_printer("SN", ui.ctx());
+                            }
+                            if ui.add_enabled(query_button_enabled, egui::Button::new("Hardware Address (HA)")).clicked() {
+                                self.query_printer("HA", ui.ctx());
+                            }
+                            if ui.add_enabled(query_button_enabled, egui::Button::new("Odometer (OD)")).clicked() {
+                                self.query_printer("OD", ui.ctx());
+                            }
+                            if ui.add_enabled(query_button_enabled, egui::Button::new("Printhead Life (PH)")).clicked() {
+                                self.query_printer("PH", ui.ctx());
+                            }
+                            if ui.add_enabled(query_button_enabled, egui::Button::new("Plug and Play (PP)")).clicked() {
+                                self.query_printer("PP", ui.ctx());
+                            }
+                        });
+
+                    if self.is_querying {
+                        ui.spinner();
+                    }
                 }
 
                 if let Some(ref status) = self.print_status {
@@ -943,6 +1002,109 @@ impl State for Zebras {
                 }
             });
         });
+
+        if let Some(ref status) = self.parsed_status {
+            let mut should_clear = false;
+
+            egui::Window::new("Printer Status")
+                .resizable(true)
+                .default_width(550.0)
+                .default_height(400.0)
+                .show(ui_context, |ui| {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.heading("Status Summary");
+                            ui.separator();
+                            ui.add_space(8.0);
+
+                            if status.is_ok() {
+                                ui.label(egui::RichText::new("✓ Printer is operating normally")
+                                    .color(egui::Color32::GREEN)
+                                    .size(18.0)
+                                    .strong());
+                            } else {
+                                if status.has_errors() {
+                                    ui.label(egui::RichText::new("⚠ ERRORS DETECTED")
+                                        .color(egui::Color32::RED)
+                                        .size(18.0)
+                                        .strong());
+                                    ui.add_space(12.0);
+                                    for error in status.errors.to_descriptions() {
+                                        ui.horizontal(|ui| {
+                                            ui.label(egui::RichText::new("•").color(egui::Color32::RED).size(16.0));
+                                            ui.label(egui::RichText::new(error).color(egui::Color32::RED).size(14.0));
+                                        });
+                                        ui.add_space(4.0);
+                                    }
+                                    ui.add_space(16.0);
+                                }
+
+                                if status.has_warnings() {
+                                    ui.label(egui::RichText::new("⚠ Warnings")
+                                        .color(egui::Color32::YELLOW)
+                                        .size(18.0)
+                                        .strong());
+                                    ui.add_space(12.0);
+                                    for warning in status.warnings.to_descriptions() {
+                                        ui.horizontal(|ui| {
+                                            ui.label(egui::RichText::new("•").color(egui::Color32::YELLOW).size(16.0));
+                                            ui.label(egui::RichText::new(warning).color(egui::Color32::YELLOW).size(14.0));
+                                        });
+                                        ui.add_space(4.0);
+                                    }
+                                }
+                            }
+                        });
+
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button("Close").clicked() {
+                            should_clear = true;
+                        }
+                    });
+                });
+
+            if should_clear {
+                self.parsed_status = None;
+            }
+        }
+
+        if self.query_response.is_some() {
+            let response_text = self.query_response.clone().unwrap();
+            let mut should_clear = false;
+            let mut should_copy = false;
+
+            egui::Window::new("Printer Query Response")
+                .resizable(true)
+                .default_width(600.0)
+                .show(ui_context, |ui| {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::TextEdit::multiline(&mut response_text.as_str())
+                                    .code_editor()
+                                    .desired_width(f32::INFINITY)
+                                    .interactive(false)
+                            );
+                        });
+                    if ui.button("Clear").clicked() {
+                        should_clear = true;
+                    }
+                    if ui.button("Copy").clicked() {
+                        should_copy = true;
+                    }
+                });
+
+            if should_clear {
+                self.query_response = None;
+            }
+            if should_copy {
+                ui_context.copy_text(response_text);
+            }
+        }
 
         egui::CentralPanel::default().show(ui_context, |ui| {
             ui.columns(2, |columns| {
