@@ -31,6 +31,7 @@ pub struct Zebras {
     parsed_status: Option<PrinterStatus>,
     last_query_type: Option<String>,
     cutting_enabled: bool,
+    show_query_window: bool,
 }
 
 impl Default for Zebras {
@@ -83,7 +84,7 @@ impl Default for Zebras {
             selected_printer: None,
             is_scanning: false,
             print_status: None,
-            manual_ip: "10.73.27.1".to_string(),
+            manual_ip: "10.73.27.7".to_string(),
             image_load_status: None,
             graphic_threshold: 128,
             pending_query_result: Arc::new(Mutex::new(None)),
@@ -92,6 +93,7 @@ impl Default for Zebras {
             parsed_status: None,
             last_query_type: None,
             cutting_enabled: false,
+            show_query_window: false,
         }
     }
 }
@@ -109,6 +111,7 @@ impl Zebras {
         if enabled {
             let has_media_mode = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::MediaModeDelayed));
             let has_cut_now = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::CutNow));
+            let has_tear_off = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::MediaModeTearOff));
 
             if !has_media_mode {
                 if let Some(start_idx) = self.zpl_commands.iter().position(|cmd| matches!(cmd, ZplCommand::StartFormat)) {
@@ -121,8 +124,14 @@ impl Zebras {
                     self.zpl_commands.insert(end_idx, ZplCommand::CutNow);
                 }
             }
+
+            if !has_tear_off {
+                if let Some(end_idx) = self.zpl_commands.iter().position(|cmd| matches!(cmd, ZplCommand::EndFormat)) {
+                    self.zpl_commands.insert(end_idx, ZplCommand::MediaModeTearOff);
+                }
+            }
         } else {
-            self.zpl_commands.retain(|cmd| !matches!(cmd, ZplCommand::MediaModeDelayed | ZplCommand::CutNow));
+            self.zpl_commands.retain(|cmd| !matches!(cmd, ZplCommand::MediaModeDelayed | ZplCommand::CutNow | ZplCommand::MediaModeTearOff));
         }
         self.is_dirty = true;
     }
@@ -409,7 +418,14 @@ impl Zebras {
     fn send_to_printer(&mut self) {
         if let Some(idx) = self.selected_printer {
             if let Some(printer) = self.printers.get(idx) {
-                let zpl = self.get_zpl_text();
+                let mut zpl = String::new();
+
+                if !self.cutting_enabled {
+                    zpl.push_str("^XA^MMT^XZ\n");
+                }
+
+                zpl.push_str(&self.get_zpl_text());
+
                 match crate::printer::send_to_printer(printer, &zpl) {
                     Ok(_) => {
                         self.print_status = Some(format!("Sent to {}", printer.name));
@@ -443,10 +459,14 @@ impl Zebras {
 
             if !self.printers.iter().any(|p| p.ip == ip) {
                 self.printers.push(printer);
-                self.print_status = Some(format!("Added printer at {}", ip));
+                let new_index = self.printers.len() - 1;
+                self.selected_printer = Some(new_index);
+                self.print_status = Some(format!("Added and selected printer at {}", ip));
                 self.manual_ip.clear();
             } else {
-                self.print_status = Some(format!("Printer at {} already exists", ip));
+                let existing_index = self.printers.iter().position(|p| p.ip == ip);
+                self.selected_printer = existing_index;
+                self.print_status = Some(format!("Printer at {} already exists, selected", ip));
             }
         }
     }
@@ -522,15 +542,15 @@ impl Zebras {
     fn render_command_editor(&mut self, ui: &mut egui::Ui, idx: usize) {
         let command = &mut self.zpl_commands[idx];
         match command {
-            ZplCommand::StartFormat | ZplCommand::EndFormat | ZplCommand::FieldSeparator | ZplCommand::MediaModeDelayed | ZplCommand::CutNow => {}
+            ZplCommand::StartFormat | ZplCommand::EndFormat | ZplCommand::FieldSeparator | ZplCommand::MediaModeDelayed | ZplCommand::MediaModeTearOff | ZplCommand::CutNow => {}
             ZplCommand::FieldOrigin { x, y } => {
                 ui.horizontal(|ui| {
                     ui.label("X:");
-                    if ui.add(egui::DragValue::new(x).speed(1)).changed() {
+                    if ui.add(egui::DragValue::new(x).speed(1)).lost_focus() {
                         self.is_dirty = true;
                     }
                     ui.label("Y:");
-                    if ui.add(egui::DragValue::new(y).speed(1)).changed() {
+                    if ui.add(egui::DragValue::new(y).speed(1)).lost_focus() {
                         self.is_dirty = true;
                     }
                 });
@@ -540,11 +560,11 @@ impl Zebras {
             } => {
                 ui.horizontal(|ui| {
                     ui.label("Height:");
-                    if ui.add(egui::DragValue::new(height).speed(1)).changed() {
+                    if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
                         self.is_dirty = true;
                     }
                     ui.label("Width:");
-                    if ui.add(egui::DragValue::new(width).speed(1)).changed() {
+                    if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
                         self.is_dirty = true;
                     }
                 });
@@ -564,15 +584,15 @@ impl Zebras {
             } => {
                 ui.horizontal(|ui| {
                     ui.label("W:");
-                    if ui.add(egui::DragValue::new(width).speed(1)).changed() {
+                    if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
                         self.is_dirty = true;
                     }
                     ui.label("H:");
-                    if ui.add(egui::DragValue::new(height).speed(1)).changed() {
+                    if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
                         self.is_dirty = true;
                     }
                     ui.label("T:");
-                    if ui.add(egui::DragValue::new(thickness).speed(1)).changed() {
+                    if ui.add(egui::DragValue::new(thickness).speed(1)).lost_focus() {
                         self.is_dirty = true;
                     }
                 });
@@ -582,11 +602,11 @@ impl Zebras {
                     ui.label(egui::RichText::new("Note: Add Field Origin (^FO) command before this").small().color(egui::Color32::GRAY));
                     ui.horizontal(|ui| {
                         ui.label("W:");
-                        if ui.add(egui::DragValue::new(width).speed(1)).changed() {
+                        if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
                             self.is_dirty = true;
                         }
                         ui.label("H:");
-                        if ui.add(egui::DragValue::new(height).speed(1)).changed() {
+                        if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
                             self.is_dirty = true;
                         }
                     });
@@ -901,7 +921,7 @@ impl State for Zebras {
                 ui.separator();
 
                 ui.label("Preset:");
-                let preset_response = egui::ComboBox::from_id_salt("preset_selector")
+                let preset_response = egui::ComboBox::from_id_salt(ui.next_auto_id())
                     .selected_text("Load...")
                     .show_ui(ui, |ui| {
                         let mut clicked_preset = None;
@@ -978,7 +998,7 @@ impl State for Zebras {
                         "Select..."
                     };
 
-                    egui::ComboBox::from_id_salt("printer_selector")
+                    egui::ComboBox::from_id_salt(ui.next_auto_id())
                         .selected_text(selected_text)
                         .show_ui(ui, |ui| {
                             for (idx, printer) in self.printers.iter().enumerate() {
@@ -994,33 +1014,8 @@ impl State for Zebras {
 
                     ui.separator();
 
-                    ui.label("Query:");
-                    let query_button_enabled = self.selected_printer.is_some() && !self.is_querying;
-                    egui::ComboBox::from_id_salt("query_selector")
-                        .selected_text("Select Query...")
-                        .show_ui(ui, |ui| {
-                            if ui.add_enabled(query_button_enabled, egui::Button::new("Printer Status (ES)")).clicked() {
-                                self.query_printer("ES", ui.ctx());
-                            }
-                            if ui.add_enabled(query_button_enabled, egui::Button::new("Serial Number (SN)")).clicked() {
-                                self.query_printer("SN", ui.ctx());
-                            }
-                            if ui.add_enabled(query_button_enabled, egui::Button::new("Hardware Address (HA)")).clicked() {
-                                self.query_printer("HA", ui.ctx());
-                            }
-                            if ui.add_enabled(query_button_enabled, egui::Button::new("Odometer (OD)")).clicked() {
-                                self.query_printer("OD", ui.ctx());
-                            }
-                            if ui.add_enabled(query_button_enabled, egui::Button::new("Printhead Life (PH)")).clicked() {
-                                self.query_printer("PH", ui.ctx());
-                            }
-                            if ui.add_enabled(query_button_enabled, egui::Button::new("Plug and Play (PP)")).clicked() {
-                                self.query_printer("PP", ui.ctx());
-                            }
-                        });
-
-                    if self.is_querying {
-                        ui.spinner();
+                    if ui.button("Query Printer...").clicked() {
+                        self.show_query_window = true;
                     }
                 }
 
@@ -1073,7 +1068,7 @@ impl State for Zebras {
                                     self.raw_zpl_input.clear();
                                     self.is_dirty = true;
                                 }
-                                let example_response = egui::ComboBox::from_id_salt("example_selector")
+                                let example_response = egui::ComboBox::from_id_salt(ui.next_auto_id())
                                     .selected_text("Load Example...")
                                     .show_ui(ui, |ui| {
                                         let mut selected = None;
@@ -1129,7 +1124,7 @@ impl State for Zebras {
                         } else {
                             ui.horizontal(|ui| {
                                 ui.label("Add Command:");
-                                let response = egui::ComboBox::from_id_salt("command_selector")
+                                let response = egui::ComboBox::from_id_salt(ui.next_auto_id())
                                     .selected_text("Select...")
                                     .show_ui(ui, |ui| {
                                         let mut selected = None;
@@ -1249,114 +1244,164 @@ impl State for Zebras {
                                 ui.label("Loading...");
                             });
                         }
-
-                        if let Some(ref status) = self.parsed_status {
-                            let mut clear_status = false;
-
-                            ui.add_space(20.0);
-                            ui.separator();
-                            ui.add_space(10.0);
-
-                            ui.horizontal(|ui| {
-                                ui.heading("Printer Status");
-                                if ui.button("Clear").clicked() {
-                                    clear_status = true;
-                                }
-                            });
-                            ui.separator();
-                            ui.add_space(8.0);
-
-                            egui::ScrollArea::vertical()
-                                .max_height(300.0)
-                                .auto_shrink([false, false])
-                                .show(ui, |ui| {
-                                    if status.is_ok() {
-                                        ui.label(egui::RichText::new("✓ Printer is operating normally")
-                                            .color(egui::Color32::GREEN)
-                                            .size(16.0)
-                                            .strong());
-                                    } else {
-                                        if status.has_errors() {
-                                            ui.label(egui::RichText::new("⚠ ERRORS DETECTED")
-                                                .color(egui::Color32::RED)
-                                                .size(16.0)
-                                                .strong());
-                                            ui.add_space(10.0);
-                                            for error in status.errors.to_descriptions() {
-                                                ui.horizontal(|ui| {
-                                                    ui.label(egui::RichText::new("•").color(egui::Color32::RED).size(14.0));
-                                                    ui.label(egui::RichText::new(error).color(egui::Color32::RED).size(13.0));
-                                                });
-                                                ui.add_space(3.0);
-                                            }
-                                            ui.add_space(12.0);
-                                        }
-
-                                        if status.has_warnings() {
-                                            ui.label(egui::RichText::new("⚠ Warnings")
-                                                .color(egui::Color32::YELLOW)
-                                                .size(16.0)
-                                                .strong());
-                                            ui.add_space(10.0);
-                                            for warning in status.warnings.to_descriptions() {
-                                                ui.horizontal(|ui| {
-                                                    ui.label(egui::RichText::new("•").color(egui::Color32::YELLOW).size(14.0));
-                                                    ui.label(egui::RichText::new(warning).color(egui::Color32::YELLOW).size(13.0));
-                                                });
-                                                ui.add_space(3.0);
-                                            }
-                                        }
-                                    }
-                                });
-
-                            if clear_status {
-                                self.parsed_status = None;
-                            }
-                        }
-
-                        if self.query_response.is_some() {
-                            let response_text = self.query_response.clone().unwrap();
-                            let mut clear_response = false;
-                            let mut copy_response = false;
-
-                            ui.add_space(20.0);
-                            ui.separator();
-                            ui.add_space(10.0);
-
-                            ui.horizontal(|ui| {
-                                ui.heading("Query Response");
-                                if ui.button("Clear").clicked() {
-                                    clear_response = true;
-                                }
-                                if ui.button("Copy").clicked() {
-                                    copy_response = true;
-                                }
-                            });
-                            ui.separator();
-                            ui.add_space(8.0);
-
-                            egui::ScrollArea::vertical()
-                                .max_height(300.0)
-                                .auto_shrink([false, false])
-                                .show(ui, |ui| {
-                                    ui.add(
-                                        egui::TextEdit::multiline(&mut response_text.as_str())
-                                            .code_editor()
-                                            .desired_width(f32::INFINITY)
-                                            .interactive(false)
-                                    );
-                                });
-
-                            if clear_response {
-                                self.query_response = None;
-                            }
-                            if copy_response {
-                                ui.ctx().copy_text(response_text);
-                            }
-                        }
                     });
             });
         });
+
+        if self.show_query_window {
+            let mut show_window = self.show_query_window;
+            egui::Window::new("Printer Query")
+                .default_width(500.0)
+                .default_height(400.0)
+                .open(&mut show_window)
+                .show(ui_context, |ui| {
+                    ui.heading("Query Printer");
+                    ui.add_space(10.0);
+
+                    let query_button_enabled = self.selected_printer.is_some() && !self.is_querying;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Select query type:");
+                        egui::ComboBox::from_id_salt(ui.next_auto_id())
+                            .selected_text("Select Query...")
+                            .show_ui(ui, |ui| {
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Printer Status (ES)")).clicked() {
+                                    self.query_printer("ES", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Serial Number (SN)")).clicked() {
+                                    self.query_printer("SN", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Hardware Address (HA)")).clicked() {
+                                    self.query_printer("HA", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Odometer (OD)")).clicked() {
+                                    self.query_printer("OD", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Printhead Life (PH)")).clicked() {
+                                    self.query_printer("PH", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Plug and Play (PP)")).clicked() {
+                                    self.query_printer("PP", ui.ctx());
+                                }
+                            });
+
+                        if self.is_querying {
+                            ui.spinner();
+                        }
+                    });
+
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(10.0);
+
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            if let Some(ref status) = self.parsed_status {
+                                let mut clear_status = false;
+
+                                ui.horizontal(|ui| {
+                                    ui.heading("Printer Status");
+                                    if ui.button("Clear").clicked() {
+                                        clear_status = true;
+                                    }
+                                });
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                if status.is_ok() {
+                                    ui.label(egui::RichText::new("✓ Printer is operating normally")
+                                        .color(egui::Color32::GREEN)
+                                        .size(16.0)
+                                        .strong());
+                                } else {
+                                    if status.has_errors() {
+                                        ui.label(egui::RichText::new("⚠ ERRORS DETECTED")
+                                            .color(egui::Color32::RED)
+                                            .size(16.0)
+                                            .strong());
+                                        ui.add_space(10.0);
+                                        for error in status.errors.to_descriptions() {
+                                            ui.horizontal(|ui| {
+                                                ui.label(egui::RichText::new("•").color(egui::Color32::RED).size(14.0));
+                                                ui.label(egui::RichText::new(error).color(egui::Color32::RED).size(13.0));
+                                            });
+                                            ui.add_space(3.0);
+                                        }
+                                        ui.add_space(12.0);
+                                    }
+
+                                    if status.has_warnings() {
+                                        ui.label(egui::RichText::new("⚠ Warnings")
+                                            .color(egui::Color32::YELLOW)
+                                            .size(16.0)
+                                            .strong());
+                                        ui.add_space(10.0);
+                                        for warning in status.warnings.to_descriptions() {
+                                            ui.horizontal(|ui| {
+                                                ui.label(egui::RichText::new("•").color(egui::Color32::YELLOW).size(14.0));
+                                                ui.label(egui::RichText::new(warning).color(egui::Color32::YELLOW).size(13.0));
+                                            });
+                                            ui.add_space(3.0);
+                                        }
+                                    }
+                                }
+
+                                ui.add_space(15.0);
+
+                                if clear_status {
+                                    self.parsed_status = None;
+                                }
+                            }
+
+                            if self.query_response.is_some() {
+                                let response_text = self.query_response.clone().unwrap();
+                                let mut clear_response = false;
+                                let mut copy_response = false;
+
+                                ui.horizontal(|ui| {
+                                    ui.heading("Query Response");
+                                    if ui.button("Clear").clicked() {
+                                        clear_response = true;
+                                    }
+                                    if ui.button("Copy").clicked() {
+                                        copy_response = true;
+                                    }
+                                });
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut response_text.as_str())
+                                        .code_editor()
+                                        .desired_width(f32::INFINITY)
+                                        .desired_rows(10)
+                                        .interactive(false)
+                                );
+
+                                if clear_response {
+                                    self.query_response = None;
+                                }
+                                if copy_response {
+                                    ui.ctx().copy_text(response_text);
+                                }
+                            }
+
+                            if self.parsed_status.is_none() && self.query_response.is_none() {
+                                ui.vertical_centered(|ui| {
+                                    ui.add_space(50.0);
+                                    ui.label(egui::RichText::new("No query results yet")
+                                        .color(egui::Color32::GRAY)
+                                        .size(14.0));
+                                    ui.label(egui::RichText::new("Select a query type above")
+                                        .color(egui::Color32::GRAY)
+                                        .size(12.0));
+                                });
+                            }
+                        });
+                });
+            self.show_query_window = show_window;
+        }
     }
 
     fn on_keyboard_input(&mut self, world: &mut World, key_code: KeyCode, key_state: KeyState) {

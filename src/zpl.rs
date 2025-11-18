@@ -58,6 +58,8 @@ pub enum ZplCommand {
     },
     #[enum2str("MMD")]
     MediaModeDelayed,
+    #[enum2str("MMT")]
+    MediaModeTearOff,
     #[enum2str("JK")]
     CutNow,
 }
@@ -78,6 +80,7 @@ impl ZplCommand {
             ZplCommand::Code128Barcode { .. } => "Code 128 Barcode (^BC)",
             ZplCommand::GraphicField { .. } => "Graphic Field (^GFA)",
             ZplCommand::MediaModeDelayed => "Media Mode Delayed (^MMD)",
+            ZplCommand::MediaModeTearOff => "Media Mode Tear-off (^MMT)",
             ZplCommand::CutNow => "Cut Now (~JK)",
         }
     }
@@ -171,6 +174,7 @@ impl ZplCommand {
                 format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
             }
             ZplCommand::MediaModeDelayed => "^MMD".to_string(),
+            ZplCommand::MediaModeTearOff => "^MMT".to_string(),
             ZplCommand::CutNow => "~JK".to_string(),
         }
     }
@@ -342,6 +346,7 @@ impl ZplLabel {
                     format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
                 }
                 ZplCommand::MediaModeDelayed => format!("^MMD"),
+                ZplCommand::MediaModeTearOff => format!("^MMT"),
                 ZplCommand::CutNow => format!("~JK"),
             })
             .collect::<Vec<_>>()
