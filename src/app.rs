@@ -83,7 +83,7 @@ impl Default for Zebras {
             selected_printer: None,
             is_scanning: false,
             print_status: None,
-            manual_ip: String::new(),
+            manual_ip: "10.73.27.1".to_string(),
             image_load_status: None,
             graphic_threshold: 128,
             pending_query_result: Arc::new(Mutex::new(None)),
@@ -522,7 +522,7 @@ impl Zebras {
     fn render_command_editor(&mut self, ui: &mut egui::Ui, idx: usize) {
         let command = &mut self.zpl_commands[idx];
         match command {
-            ZplCommand::StartFormat | ZplCommand::EndFormat | ZplCommand::FieldSeparator => {}
+            ZplCommand::StartFormat | ZplCommand::EndFormat | ZplCommand::FieldSeparator | ZplCommand::MediaModeDelayed | ZplCommand::CutNow => {}
             ZplCommand::FieldOrigin { x, y } => {
                 ui.horizontal(|ui| {
                     ui.label("X:");

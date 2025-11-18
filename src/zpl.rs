@@ -56,9 +56,9 @@ pub enum ZplCommand {
         height: u32,
         data: String,
     },
-    #[enum2str("MMD", prefix = "Caret")]
+    #[enum2str("MMD")]
     MediaModeDelayed,
-    #[enum2str("JK", prefix = "Tilde")]
+    #[enum2str("JK")]
     CutNow,
 }
 
@@ -341,6 +341,8 @@ impl ZplLabel {
                     let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
                     format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
                 }
+                ZplCommand::MediaModeDelayed => format!("^MMD"),
+                ZplCommand::CutNow => format!("~JK"),
             })
             .collect::<Vec<_>>()
             .join("\n")
