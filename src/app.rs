@@ -521,39 +521,46 @@ impl Zebras {
                     std::thread::spawn(move || {
                         let mut all_results = String::new();
 
-                        all_results.push_str("=== PRINTER STATUS ===\n");
-                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQES\r\n") {
-                            all_results.push_str(&response);
-                            all_results.push_str("\n\n");
-                        }
+                        let queries = vec![
+                            ("PRINTER STATUS (ES)", "~HQES\r\n"),
+                            ("HOST STATUS (HS)", "~HQHS\r\n"),
+                            ("HOST IDENTIFICATION (HI)", "~HQHI\r\n"),
+                            ("SERIAL NUMBER (SN)", "~HQSN\r\n"),
+                            ("HARDWARE ADDRESS (HA)", "~HQHA\r\n"),
+                            ("ODOMETER (OD)", "~HQOD\r\n"),
+                            ("PRINTHEAD LIFE (PH)", "~HQPH\r\n"),
+                            ("PRINT CONFIGURATION (PR)", "~HQPR\r\n"),
+                            ("CONFIGURATION STATUS (CM)", "~HQCM\r\n"),
+                            ("BATTERY CAPACITY (BC)", "~HQBC\r\n"),
+                            ("USB DEVICE ID (UI)", "~HQUI\r\n"),
+                            ("LABEL DIMENSIONS (LD)", "~HQLD\r\n"),
+                            ("LABEL COUNT (LC)", "~HQLC\r\n"),
+                            ("FILE SYSTEM INFO (FS)", "~HQFS\r\n"),
+                            ("NETWORK ROUTER (NR)", "~HQNR\r\n"),
+                            ("MAINTENANCE ALERT (MA)", "~HQMA\r\n"),
+                            ("SENSOR/MEDIA STATUS (SM)", "~HQSM\r\n"),
+                            ("ALERTS (AL)", "~HQAL\r\n"),
+                            ("FIRMWARE VERSION (FW)", "~HQFW\r\n"),
+                            ("SUPPLIES STATUS (ST)", "~HQST\r\n"),
+                            ("DARKNESS SETTINGS (DA)", "~HQDA\r\n"),
+                            ("PLUG AND PLAY (PP)", "~HQPP\r\n"),
+                        ];
 
-                        all_results.push_str("=== SERIAL NUMBER ===\n");
-                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQSN\r\n") {
-                            all_results.push_str(&response);
+                        for (name, query) in queries {
+                            all_results.push_str(&format!("=== {} ===\n", name));
+                            match crate::printer::query_printer(&printer, query) {
+                                Ok(response) => {
+                                    if response.trim().is_empty() {
+                                        all_results.push_str("(No response or not supported)\n");
+                                    } else {
+                                        all_results.push_str(&response);
+                                    }
+                                }
+                                Err(e) => {
+                                    all_results.push_str(&format!("Error: {}\n", e));
+                                }
+                            }
                             all_results.push_str("\n\n");
-                        }
-
-                        all_results.push_str("=== HARDWARE ADDRESS ===\n");
-                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQHA\r\n") {
-                            all_results.push_str(&response);
-                            all_results.push_str("\n\n");
-                        }
-
-                        all_results.push_str("=== ODOMETER ===\n");
-                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQOD\r\n") {
-                            all_results.push_str(&response);
-                            all_results.push_str("\n\n");
-                        }
-
-                        all_results.push_str("=== PRINTHEAD LIFE ===\n");
-                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQPH\r\n") {
-                            all_results.push_str(&response);
-                            all_results.push_str("\n\n");
-                        }
-
-                        all_results.push_str("=== PLUG AND PLAY ===\n");
-                        if let Ok(response) = crate::printer::query_printer(&printer, "~HQPP\r\n") {
-                            all_results.push_str(&response);
                         }
 
                         if let Ok(mut guard) = pending_result.lock() {
@@ -1402,6 +1409,12 @@ impl State for Zebras {
                                 if ui.add_enabled(query_button_enabled, egui::Button::new("Printer Status (ES)")).clicked() {
                                     self.query_printer("ES", ui.ctx());
                                 }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Host Status (HS)")).clicked() {
+                                    self.query_printer("HS", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Host Identification (HI)")).clicked() {
+                                    self.query_printer("HI", ui.ctx());
+                                }
                                 if ui.add_enabled(query_button_enabled, egui::Button::new("Serial Number (SN)")).clicked() {
                                     self.query_printer("SN", ui.ctx());
                                 }
@@ -1413,6 +1426,48 @@ impl State for Zebras {
                                 }
                                 if ui.add_enabled(query_button_enabled, egui::Button::new("Printhead Life (PH)")).clicked() {
                                     self.query_printer("PH", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Print Configuration (PR)")).clicked() {
+                                    self.query_printer("PR", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Config Status (CM)")).clicked() {
+                                    self.query_printer("CM", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Battery Capacity (BC)")).clicked() {
+                                    self.query_printer("BC", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("USB Device ID (UI)")).clicked() {
+                                    self.query_printer("UI", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Label Dimensions (LD)")).clicked() {
+                                    self.query_printer("LD", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Label Count (LC)")).clicked() {
+                                    self.query_printer("LC", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("File System Info (FS)")).clicked() {
+                                    self.query_printer("FS", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Network Router (NR)")).clicked() {
+                                    self.query_printer("NR", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Maintenance Alert (MA)")).clicked() {
+                                    self.query_printer("MA", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Sensor/Media Status (SM)")).clicked() {
+                                    self.query_printer("SM", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Alerts (AL)")).clicked() {
+                                    self.query_printer("AL", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Firmware Version (FW)")).clicked() {
+                                    self.query_printer("FW", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Supplies Status (ST)")).clicked() {
+                                    self.query_printer("ST", ui.ctx());
+                                }
+                                if ui.add_enabled(query_button_enabled, egui::Button::new("Darkness Settings (DA)")).clicked() {
+                                    self.query_printer("DA", ui.ctx());
                                 }
                                 if ui.add_enabled(query_button_enabled, egui::Button::new("Plug and Play (PP)")).clicked() {
                                     self.query_printer("PP", ui.ctx());
