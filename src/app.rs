@@ -30,6 +30,7 @@ pub struct Zebras {
     is_querying: bool,
     parsed_status: Option<PrinterStatus>,
     last_query_type: Option<String>,
+    cutting_enabled: bool,
 }
 
 impl Default for Zebras {
@@ -90,6 +91,7 @@ impl Default for Zebras {
             is_querying: false,
             parsed_status: None,
             last_query_type: None,
+            cutting_enabled: false,
         }
     }
 }
@@ -101,6 +103,28 @@ impl Zebras {
         } else {
             commands_to_zpl(&self.zpl_commands)
         }
+    }
+
+    fn toggle_cutting(&mut self, enabled: bool) {
+        if enabled {
+            let has_media_mode = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::MediaModeDelayed));
+            let has_cut_now = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::CutNow));
+
+            if !has_media_mode {
+                if let Some(start_idx) = self.zpl_commands.iter().position(|cmd| matches!(cmd, ZplCommand::StartFormat)) {
+                    self.zpl_commands.insert(start_idx + 1, ZplCommand::MediaModeDelayed);
+                }
+            }
+
+            if !has_cut_now {
+                if let Some(end_idx) = self.zpl_commands.iter().position(|cmd| matches!(cmd, ZplCommand::EndFormat)) {
+                    self.zpl_commands.insert(end_idx, ZplCommand::CutNow);
+                }
+            }
+        } else {
+            self.zpl_commands.retain(|cmd| !matches!(cmd, ZplCommand::MediaModeDelayed | ZplCommand::CutNow));
+        }
+        self.is_dirty = true;
     }
 
     fn get_presets() -> Vec<(&'static str, Vec<ZplCommand>)> {
@@ -898,6 +922,13 @@ impl State for Zebras {
                 }
 
                 ui.separator();
+
+                if !self.raw_zpl_mode {
+                    if ui.checkbox(&mut self.cutting_enabled, "Enable Cutting").changed() {
+                        self.toggle_cutting(self.cutting_enabled);
+                    }
+                    ui.separator();
+                }
 
                 let button_enabled = self.is_dirty && !self.is_loading;
                 let button_text = if self.is_loading {

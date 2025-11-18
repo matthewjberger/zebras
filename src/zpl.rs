@@ -56,6 +56,10 @@ pub enum ZplCommand {
         height: u32,
         data: String,
     },
+    #[enum2str("MMD", prefix = "Caret")]
+    MediaModeDelayed,
+    #[enum2str("JK", prefix = "Tilde")]
+    CutNow,
 }
 
 impl ZplCommand {
@@ -73,6 +77,8 @@ impl ZplCommand {
             ZplCommand::BarcodeFieldDefault { .. } => "Barcode Field Default (^BY)",
             ZplCommand::Code128Barcode { .. } => "Code 128 Barcode (^BC)",
             ZplCommand::GraphicField { .. } => "Graphic Field (^GFA)",
+            ZplCommand::MediaModeDelayed => "Media Mode Delayed (^MMD)",
+            ZplCommand::CutNow => "Cut Now (~JK)",
         }
     }
 
@@ -164,6 +170,8 @@ impl ZplCommand {
                 let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
                 format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
             }
+            ZplCommand::MediaModeDelayed => "^MMD".to_string(),
+            ZplCommand::CutNow => "~JK".to_string(),
         }
     }
 }
