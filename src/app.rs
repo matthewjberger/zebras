@@ -1600,30 +1600,110 @@ impl eframe::App for Zebras {
                                     );
                                 });
                         } else {
+                            ui.label("Add Command:");
                             ui.horizontal(|ui| {
-                                ui.label("Add Command:");
+                                if ui.button("Field Origin").clicked() {
+                                    self.zpl_commands.push(ZplCommand::FieldOrigin { x: 0, y: 0 });
+                                    self.is_dirty = true;
+                                }
+                                if ui.button("Field Data").clicked() {
+                                    self.zpl_commands.push(ZplCommand::FieldData { data: String::new() });
+                                    self.is_dirty = true;
+                                }
+                                if ui.button("Field Sep").clicked() {
+                                    self.zpl_commands.push(ZplCommand::FieldSeparator);
+                                    self.is_dirty = true;
+                                }
+                                if ui.button("Font").clicked() {
+                                    self.zpl_commands.push(ZplCommand::Font {
+                                        orientation: FontOrientation::Normal,
+                                        height: 30,
+                                        width: 30,
+                                    });
+                                    self.is_dirty = true;
+                                }
+                            });
+                            ui.horizontal(|ui| {
+                                if ui.button("Graphic Box").clicked() {
+                                    self.zpl_commands.push(ZplCommand::GraphicBox {
+                                        width: 100,
+                                        height: 100,
+                                        thickness: 1,
+                                        color: None,
+                                        rounding: None,
+                                    });
+                                    self.is_dirty = true;
+                                }
+                                if ui.button("Graphic Field").clicked() {
+                                    self.zpl_commands.push(ZplCommand::GraphicField {
+                                        width: 32,
+                                        height: 32,
+                                        data: String::new(),
+                                    });
+                                    self.is_dirty = true;
+                                }
+
                                 let response = egui::ComboBox::from_id_salt(ui.next_auto_id())
-                                    .selected_text("Select...")
+                                    .selected_text("More...")
                                     .show_ui(ui, |ui| {
                                         let mut selected = None;
                                         egui::ScrollArea::vertical()
-                                            .max_height(400.0)
+                                            .max_height(300.0)
                                             .show(ui, |ui| {
-                                                for (idx, (name, _)) in
-                                                    ZplCommand::all_command_types().iter().enumerate()
-                                                {
-                                                    if ui.selectable_label(false, *name).clicked() {
-                                                        selected = Some(idx);
-                                                    }
+                                                if ui.selectable_label(false, "Start Format (^XA)").clicked() {
+                                                    selected = Some(ZplCommand::StartFormat);
+                                                }
+                                                if ui.selectable_label(false, "End Format (^XZ)").clicked() {
+                                                    selected = Some(ZplCommand::EndFormat);
+                                                }
+                                                if ui.selectable_label(false, "Download Graphic (~DG)").clicked() {
+                                                    selected = Some(ZplCommand::DownloadGraphic {
+                                                        name: "GRAPHIC".to_string(),
+                                                        width: 32,
+                                                        height: 32,
+                                                        data: String::new(),
+                                                    });
+                                                }
+                                                if ui.selectable_label(false, "Recall Graphic (^XG)").clicked() {
+                                                    selected = Some(ZplCommand::RecallGraphic {
+                                                        name: "GRAPHIC".to_string(),
+                                                        magnification_x: 1,
+                                                        magnification_y: 1,
+                                                    });
+                                                }
+                                                if ui.selectable_label(false, "Barcode Default (^BY)").clicked() {
+                                                    selected = Some(ZplCommand::BarcodeFieldDefault {
+                                                        width: 2,
+                                                        ratio: 3.0,
+                                                        height: 80,
+                                                    });
+                                                }
+                                                if ui.selectable_label(false, "Code 128 Barcode (^BC)").clicked() {
+                                                    selected = Some(ZplCommand::Code128Barcode {
+                                                        orientation: FieldOrientation::Normal,
+                                                        height: 80,
+                                                        print_interpretation: true,
+                                                        print_above: false,
+                                                        check_digit: false,
+                                                        mode: FieldOrientation::Normal,
+                                                    });
+                                                }
+                                                if ui.selectable_label(false, "Media Mode Delayed (^MMD)").clicked() {
+                                                    selected = Some(ZplCommand::MediaModeDelayed);
+                                                }
+                                                if ui.selectable_label(false, "Media Mode Tear-off (^MMT)").clicked() {
+                                                    selected = Some(ZplCommand::MediaModeTearOff);
+                                                }
+                                                if ui.selectable_label(false, "Cut Now (~JK)").clicked() {
+                                                    selected = Some(ZplCommand::CutNow);
                                                 }
                                             });
                                         selected
                                     });
 
                                 if let Some(inner) = response.inner {
-                                    if let Some(idx) = inner {
-                                        let (_, template) = &ZplCommand::all_command_types()[idx];
-                                        self.zpl_commands.push(template.clone());
+                                    if let Some(command) = inner {
+                                        self.zpl_commands.push(command);
                                         self.is_dirty = true;
                                     }
                                 }
