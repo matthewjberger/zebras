@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
 use zebras::{
     labelary::LabelaryClient,
@@ -8,6 +9,97 @@ use zebras::{
 };
 
 const LOGO_BYTES: &[u8] = include_bytes!("../logomark-white.png");
+
+#[derive(Debug, Clone)]
+pub struct CsvOrder {
+    promise_time: String,
+    submit_time: String,
+    order_id: String,
+    entree_id: String,
+    quantity: String,
+    ingredients: HashMap<String, String>,
+}
+
+impl CsvOrder {
+    fn to_label_config(&self, order_number: usize) -> LabelConfig {
+        let mut ingredients = Vec::new();
+
+        let ingredient_map = vec![
+            ("Barbacoa-II-BARBACOA", "Barbacoa"),
+            ("BlackBeans-II-BLACK-BEANS", "Black Beans"),
+            ("BrownRice-II-BROWN-RICE", "Brown Rice"),
+            ("Carnitas-II-CARNITAS", "Carnitas"),
+            ("Cheese-II-CHEESE", "Cheese"),
+            ("Chicken-II-CHICKEN", "Chicken"),
+            ("MediumCorn-II-CORN-SALSA", "Corn Salsa"),
+            ("Fajitas-II-FAJITA-VEGGIES", "Fajita Veggies"),
+            ("MildTomato-II-TOMATO-SALSA", "Tomato Salsa"),
+            ("MediumGreen-II-GREEN-CHILI-SALSA", "Green Chili Salsa"),
+            ("Guac-II-GUAC", "Guacamole"),
+            ("Pinto-II-PINTO-BEANS", "Pinto Beans"),
+            ("Queso-II-QUESO-BLANCO", "Queso Blanco"),
+            ("HotRed-II-RED-CHILI-SALSA", "Red Chili Salsa"),
+            ("TacoLettuce-II-ROMAINE", "Romaine Lettuce"),
+            ("Sofritas-II-SOFRITAS", "Sofritas"),
+            ("SourCream-II-SOUR-CREAM", "Sour Cream"),
+            ("Steak-II-STEAK", "Steak"),
+            ("WhiteRice-II-WHITE-RICE", "White Rice"),
+            ("SALAD-II-SALAD-LETTUCE", "Salad Lettuce"),
+        ];
+
+        for (csv_name, display_name) in ingredient_map {
+            if let Some(value) = self.ingredients.get(csv_name) {
+                match value.as_str() {
+                    "N" => ingredients.push(format!("* {}", display_name)),
+                    "L" => ingredients.push(format!("* {} (Light)", display_name)),
+                    "D" => ingredients.push(format!("* {} (Double)", display_name)),
+                    _ => {}
+                }
+            }
+        }
+
+        let date_part = self.promise_time.split_whitespace().next().unwrap_or("");
+        let time_part = self.promise_time.split_whitespace().nth(1).unwrap_or("");
+        let formatted_date = if !date_part.is_empty() {
+            let parts: Vec<&str> = date_part.split('-').collect();
+            if parts.len() == 3 {
+                format!("{}/{}/{}", parts[1], parts[2], &parts[0][2..])
+            } else {
+                date_part.to_string()
+            }
+        } else {
+            "".to_string()
+        };
+
+        let formatted_time = if !time_part.is_empty() {
+            let time_parts: Vec<&str> = time_part.split(':').collect();
+            if time_parts.len() >= 2 {
+                let hour: u32 = time_parts[0].parse().unwrap_or(0);
+                let minute = time_parts[1];
+                if hour > 12 {
+                    format!("{}:{} PM", hour - 12, minute)
+                } else if hour == 12 {
+                    format!("12:{} PM", minute)
+                } else if hour == 0 {
+                    format!("12:{} AM", minute)
+                } else {
+                    format!("{}:{} AM", hour, minute)
+                }
+            } else {
+                time_part.to_string()
+            }
+        } else {
+            "".to_string()
+        };
+
+        LabelConfig {
+            title: "BURRITO BOWL".to_string(),
+            date: format!("{} {}", formatted_date, formatted_time),
+            bowl_description: format!("Bowl #{} ({} Ingredients)", order_number, ingredients.len()),
+            ingredients,
+        }
+    }
+}
 
 pub struct LabelConfig {
     title: String,
@@ -62,6 +154,8 @@ pub struct Zebras {
     last_query_type: Option<String>,
     show_query_window: bool,
     print_copies: u32,
+    csv_orders: Vec<CsvOrder>,
+    current_order_index: usize,
 }
 
 impl Default for Zebras {
@@ -97,6 +191,8 @@ impl Default for Zebras {
             last_query_type: None,
             show_query_window: false,
             print_copies: 1,
+            csv_orders: Vec::new(),
+            current_order_index: 0,
         }
     }
 }
@@ -214,6 +310,127 @@ impl Zebras {
         let logo_hex = Zebras::load_logo_hex();
         self.zpl_commands = Zebras::build_commands_from_config(&self.label_config, &logo_hex);
         self.is_dirty = true;
+    }
+
+    fn load_csv(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .pick_file()
+            {
+                match std::fs::read_to_string(&path) {
+                    Ok(contents) => {
+                        match self.parse_csv(&contents) {
+                            Ok(orders) => {
+                                self.csv_orders = orders;
+                                self.current_order_index = 0;
+                                if !self.csv_orders.is_empty() {
+                                    self.load_order_at_index(0);
+                                }
+                                self.print_status = Some(format!("Loaded {} orders from CSV", self.csv_orders.len()));
+                            }
+                            Err(error) => {
+                                self.print_status = Some(format!("Failed to parse CSV: {}", error));
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        self.print_status = Some(format!("Failed to read file: {}", error));
+                    }
+                }
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.print_status = Some("CSV load not available in WASM".to_string());
+        }
+    }
+
+    fn parse_csv(&self, contents: &str) -> Result<Vec<CsvOrder>, String> {
+        let mut reader = csv::Reader::from_reader(contents.as_bytes());
+        let headers = reader.headers()
+            .map_err(|e| format!("Failed to read CSV headers: {}", e))?
+            .clone();
+
+        let mut orders = Vec::new();
+
+        for result in reader.records() {
+            let record = result.map_err(|e| format!("Failed to read CSV record: {}", e))?;
+
+            let mut order = CsvOrder {
+                promise_time: record.get(0).unwrap_or("").to_string(),
+                submit_time: record.get(1).unwrap_or("").to_string(),
+                order_id: record.get(2).unwrap_or("").to_string(),
+                entree_id: record.get(3).unwrap_or("").to_string(),
+                quantity: record.get(4).unwrap_or("").to_string(),
+                ingredients: HashMap::new(),
+            };
+
+            for (index, value) in record.iter().enumerate() {
+                if index >= 5 {
+                    if let Some(header) = headers.get(index) {
+                        if !value.is_empty() {
+                            order.ingredients.insert(header.to_string(), value.to_string());
+                        }
+                    }
+                }
+            }
+
+            orders.push(order);
+        }
+
+        Ok(orders)
+    }
+
+    fn load_order_at_index(&mut self, index: usize) {
+        if index < self.csv_orders.len() {
+            self.current_order_index = index;
+            self.label_config = self.csv_orders[index].to_label_config(index + 1);
+            self.apply_label_config();
+        }
+    }
+
+    fn next_order(&mut self) {
+        if !self.csv_orders.is_empty() {
+            let next_index = (self.current_order_index + 1) % self.csv_orders.len();
+            self.load_order_at_index(next_index);
+        }
+    }
+
+    fn previous_order(&mut self) {
+        if !self.csv_orders.is_empty() {
+            let prev_index = if self.current_order_index == 0 {
+                self.csv_orders.len() - 1
+            } else {
+                self.current_order_index - 1
+            };
+            self.load_order_at_index(prev_index);
+        }
+    }
+
+    fn print_all_csv_orders(&mut self) {
+        if self.csv_orders.is_empty() {
+            self.print_status = Some("No CSV orders loaded".to_string());
+            return;
+        }
+
+        if self.selected_printer.is_none() {
+            self.print_status = Some("No printer selected".to_string());
+            return;
+        }
+
+        let total_orders = self.csv_orders.len();
+        let saved_index = self.current_order_index;
+
+        for index in 0..total_orders {
+            self.load_order_at_index(index);
+            self.send_to_printer();
+        }
+
+        self.load_order_at_index(saved_index);
+        self.print_status = Some(format!("Sent {} labels to printer", total_orders));
     }
 
     fn randomize_ingredients(&mut self) {
@@ -1219,6 +1436,33 @@ impl eframe::App for Zebras {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("Label Maker");
+                ui.separator();
+
+                if ui.button("Load CSV").clicked() {
+                    self.load_csv();
+                    if !self.csv_orders.is_empty() {
+                        self.render_zpl(ctx);
+                    }
+                }
+
+                if !self.csv_orders.is_empty() {
+                    ui.label(format!("{}/{}", self.current_order_index + 1, self.csv_orders.len()));
+
+                    if ui.button("◀ Prev").clicked() {
+                        self.previous_order();
+                        self.render_zpl(ctx);
+                    }
+
+                    if ui.button("Next ▶").clicked() {
+                        self.next_order();
+                        self.render_zpl(ctx);
+                    }
+
+                    if ui.button("Print All CSV").clicked() {
+                        self.print_all_csv_orders();
+                    }
+                }
+
                 ui.separator();
 
                 if ui.button("Save Template").clicked() {
