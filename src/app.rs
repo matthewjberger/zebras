@@ -60,6 +60,16 @@ impl Default for Zebras {
                 rounding: None,
             },
             ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 450, y: 60 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 40,
+            },
+            ZplCommand::FieldData {
+                data: "BURRITO BOWL".to_string(),
+            },
+            ZplCommand::FieldSeparator,
             ZplCommand::FieldOrigin { x: 0, y: 30 },
             ZplCommand::GraphicField {
                 width: 400,
@@ -449,6 +459,16 @@ impl Zebras {
                             thickness: 8,
                             color: Some('B'),
                             rounding: None,
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 450, y: 60 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 40,
+                        },
+                        ZplCommand::FieldData {
+                            data: "BURRITO BOWL".to_string(),
                         },
                         ZplCommand::FieldSeparator,
                         ZplCommand::FieldOrigin { x: 0, y: 30 },
