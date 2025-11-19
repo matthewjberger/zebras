@@ -7,6 +7,8 @@ use zebras::{
     zpl::{FieldOrientation, FontOrientation, ZplCommand, commands_to_zpl},
 };
 
+const LOGO_BYTES: &[u8] = include_bytes!("../logomark-white.png");
+
 pub struct Zebras {
     zpl_commands: Vec<ZplCommand>,
     rendered_image: Option<egui::TextureHandle>,
@@ -36,6 +38,8 @@ pub struct Zebras {
 
 impl Default for Zebras {
     fn default() -> Self {
+        let logo_hex = Zebras::load_logo_hex();
+
         let default_commands = vec![
             ZplCommand::StartFormat,
             ZplCommand::FieldOrigin { x: 40, y: 20 },
@@ -60,7 +64,7 @@ impl Default for Zebras {
             ZplCommand::GraphicField {
                 width: 400,
                 height: 86,
-                data: String::new(),
+                data: logo_hex,
             },
             ZplCommand::FieldSeparator,
             ZplCommand::FieldOrigin { x: 50, y: 125 },
@@ -106,6 +110,16 @@ impl Default for Zebras {
 }
 
 impl Zebras {
+    fn load_logo_hex() -> String {
+        match image::load_from_memory(LOGO_BYTES) {
+            Ok(img) => {
+                let resized = img.resize(400, 86, image::imageops::FilterType::Lanczos3);
+                zebras::zpl::image_to_zpl_hex(&resized, 128)
+            }
+            Err(_) => String::new(),
+        }
+    }
+
     fn get_zpl_text(&self) -> String {
         if self.raw_zpl_mode {
             self.raw_zpl_input.clone()
@@ -415,45 +429,48 @@ impl Zebras {
             ),
             (
                 "Framed Label with Image",
-                vec![
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 40, y: 20 },
-                    ZplCommand::GraphicBox {
-                        width: 760,
-                        height: 570,
-                        thickness: 8,
-                        color: Some('B'),
-                        rounding: Some(2),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 40, y: 150 },
-                    ZplCommand::GraphicBox {
-                        width: 760,
-                        height: 0,
-                        thickness: 8,
-                        color: Some('B'),
-                        rounding: None,
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 0, y: 30 },
-                    ZplCommand::GraphicField {
-                        width: 400,
-                        height: 86,
-                        data: String::new(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 50, y: 125 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 30,
-                        width: 30,
-                    },
-                    ZplCommand::FieldData {
-                        data: "11/19/25".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
+                {
+                    let logo_hex = Zebras::load_logo_hex();
+                    vec![
+                        ZplCommand::StartFormat,
+                        ZplCommand::FieldOrigin { x: 40, y: 20 },
+                        ZplCommand::GraphicBox {
+                            width: 760,
+                            height: 570,
+                            thickness: 8,
+                            color: Some('B'),
+                            rounding: Some(2),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 40, y: 150 },
+                        ZplCommand::GraphicBox {
+                            width: 760,
+                            height: 0,
+                            thickness: 8,
+                            color: Some('B'),
+                            rounding: None,
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 0, y: 30 },
+                        ZplCommand::GraphicField {
+                            width: 400,
+                            height: 86,
+                            data: logo_hex,
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 50, y: 125 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 30,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "11/19/25".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::EndFormat,
+                    ]
+                },
             ),
         ]
     }
