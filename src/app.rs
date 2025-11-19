@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::labelary::LabelaryClient;
 use crate::printer::ZplPrinter;
-use crate::printer_status::{PrinterStatus, PrinterInfo};
+use crate::printer_status::*;
 use crate::zpl::{commands_to_zpl, parse_graphic_field_from_zpl, FieldOrientation, FontOrientation, ZplCommand};
 
 pub struct Zebras {
@@ -25,6 +25,7 @@ pub struct Zebras {
     manual_ip: String,
     image_load_status: Option<String>,
     graphic_threshold: u8,
+    needs_render_after_image: bool,
     pending_query_result: Arc<Mutex<Option<Result<String, String>>>>,
     query_response: Option<String>,
     is_querying: bool,
@@ -88,6 +89,7 @@ impl Default for Zebras {
             manual_ip: "10.73.27.7".to_string(),
             image_load_status: None,
             graphic_threshold: 128,
+            needs_render_after_image: false,
             pending_query_result: Arc::new(Mutex::new(None)),
             query_response: None,
             is_querying: false,
@@ -510,7 +512,7 @@ impl Zebras {
         if let Some(idx) = self.selected_printer {
             if let Some(printer) = self.printers.get(idx).cloned() {
                 self.is_querying = true;
-                self.query_response = Some("Querying all printer information...".to_string());
+                self.query_response = Some("Starting comprehensive query...\n\n".to_string());
                 self.last_query_type = Some("ALL".to_string());
 
                 let ctx = ui_context.clone();
@@ -519,8 +521,6 @@ impl Zebras {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     std::thread::spawn(move || {
-                        let mut all_results = String::new();
-
                         let queries = vec![
                             ("PRINTER STATUS (ES)", "~HQES\r\n"),
                             ("HOST STATUS (HS)", "~HQHS\r\n"),
@@ -546,27 +546,37 @@ impl Zebras {
                             ("PLUG AND PLAY (PP)", "~HQPP\r\n"),
                         ];
 
-                        for (name, query) in queries {
-                            all_results.push_str(&format!("=== {} ===\n", name));
+                        let total = queries.len();
+                        for (index, (name, query)) in queries.iter().enumerate() {
+                            let progress = format!("[{}/{}] ", index + 1, total);
+                            let mut section = format!("=== {} ===\n", name);
+
                             match crate::printer::query_printer(&printer, query) {
                                 Ok(response) => {
                                     if response.trim().is_empty() {
-                                        all_results.push_str("(No response or not supported)\n");
+                                        section.push_str("(No response or not supported)\n");
                                     } else {
-                                        all_results.push_str(&response);
+                                        section.push_str(&response);
                                     }
                                 }
                                 Err(e) => {
-                                    all_results.push_str(&format!("Error: {}\n", e));
+                                    section.push_str(&format!("Error: {}\n", e));
                                 }
                             }
-                            all_results.push_str("\n\n");
-                        }
+                            section.push_str("\n\n");
 
-                        if let Ok(mut guard) = pending_result.lock() {
-                            *guard = Some(Ok(all_results));
+                            if let Ok(mut guard) = pending_result.lock() {
+                                let current = guard.as_ref()
+                                    .and_then(|r| r.as_ref().ok())
+                                    .map(|s| s.clone())
+                                    .unwrap_or_else(|| format!("Starting comprehensive query...\n\n"));
+
+                                let is_complete = index == total - 1;
+                                let complete_marker = if is_complete { "\n___COMPLETE___\n" } else { "" };
+                                *guard = Some(Ok(format!("{}{}{}{}", current, progress, section, complete_marker)));
+                            }
+                            ctx.request_repaint();
                         }
-                        ctx.request_repaint();
                     });
                 }
 
@@ -751,11 +761,11 @@ impl Zebras {
                                                         *width = parsed_width;
                                                         *height = parsed_height;
                                                         *data = hex_data;
-                                                        self.is_dirty = true;
                                                         self.image_load_status = Some(format!(
-                                                            "Image loaded! {}x{}, {} chars of hex data",
+                                                            "Image loaded! {}x{}, {} chars - rendering...",
                                                             width, height, data.len()
                                                         ));
+                                                        self.needs_render_after_image = true;
                                                     } else {
                                                         self.image_load_status = Some(format!(
                                                             "Failed to parse ZPL response. Response: {}",
@@ -783,11 +793,11 @@ impl Zebras {
                                                             *width = parsed_width;
                                                             *height = parsed_height;
                                                             *data = hex_data;
-                                                            self.is_dirty = true;
                                                             self.image_load_status = Some(format!(
-                                                                "Image loaded! {}x{}, {} chars of hex data",
+                                                                "Image loaded! {}x{}, {} chars - rendering...",
                                                                 width, height, data.len()
                                                             ));
+                                                            self.needs_render_after_image = true;
                                                         } else {
                                                             self.image_load_status = Some(format!(
                                                                 "Failed to parse ZPL response. Response: {}",
@@ -836,11 +846,11 @@ impl Zebras {
                                             image::imageops::FilterType::Lanczos3,
                                         );
                                         *data = crate::zpl::image_to_zpl_hex(&resized_image, self.graphic_threshold);
-                                        self.is_dirty = true;
                                         self.image_load_status = Some(format!(
-                                            "Image loaded! {} chars of hex data",
+                                            "Image loaded! {} chars - rendering...",
                                             data.len()
                                         ));
+                                        self.needs_render_after_image = true;
                                     }
                                     Err(e) => {
                                         self.image_load_status = Some(format!("Error loading image: {}", e));
@@ -950,7 +960,29 @@ impl State for Zebras {
         }
 
         let pending_query = if let Ok(mut guard) = self.pending_query_result.try_lock() {
-            guard.take()
+            if let Some(ref result) = *guard {
+                if let Ok(response) = result {
+                    if let Some(ref query_type) = self.last_query_type {
+                        if query_type == "ALL" {
+                            let is_complete = response.contains("___COMPLETE___");
+                            if is_complete {
+                                guard.take()
+                            } else {
+                                self.query_response = Some(response.replace("___COMPLETE___", ""));
+                                None
+                            }
+                        } else {
+                            guard.take()
+                        }
+                    } else {
+                        guard.take()
+                    }
+                } else {
+                    guard.take()
+                }
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -959,47 +991,83 @@ impl State for Zebras {
             self.is_querying = false;
             match query_result {
                 Ok(response) => {
+                    let cleaned_response = response.replace("___COMPLETE___", "");
                     if let Some(ref query_type) = self.last_query_type {
                         match query_type.as_str() {
                             "ES" => {
-                                match PrinterStatus::parse(&response) {
+                                match PrinterStatus::parse(&cleaned_response) {
                                     Ok(status) => {
                                         self.parsed_status = Some(status);
                                         self.query_response = None;
                                     }
                                     Err(e) => {
-                                        self.query_response = Some(format!("Failed to parse status: {}\n\nRaw response:\n{}", e, response));
+                                        self.query_response = Some(format!("Failed to parse status: {}\n\nRaw response:\n{}", e, cleaned_response));
                                         self.parsed_status = None;
                                     }
                                 }
                             }
                             "SN" => {
-                                self.printer_info.serial_number = PrinterInfo::parse_serial_number(&response);
-                                self.query_response = Some(response);
+                                self.printer_info.serial_number = PrinterInfo::parse_serial_number(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
                                 self.parsed_status = None;
                             }
                             "HA" => {
-                                self.printer_info.hardware_address = PrinterInfo::parse_hardware_address(&response);
-                                self.query_response = Some(response);
+                                self.printer_info.hardware_address = PrinterInfo::parse_hardware_address(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
                                 self.parsed_status = None;
                             }
                             "OD" => {
-                                self.printer_info.odometer = PrinterInfo::parse_odometer(&response);
-                                self.query_response = Some(response);
+                                self.printer_info.odometer = PrinterInfo::parse_odometer(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
                                 self.parsed_status = None;
                             }
                             "PH" => {
-                                self.printer_info.printhead_life = PrinterInfo::parse_printhead_life(&response);
-                                self.query_response = Some(response);
+                                self.printer_info.printhead_life = PrinterInfo::parse_printhead_life(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
                                 self.parsed_status = None;
                             }
                             "PP" => {
-                                self.printer_info.plug_and_play = PrinterInfo::parse_plug_and_play(&response);
-                                self.query_response = Some(response);
+                                self.printer_info.plug_and_play = PrinterInfo::parse_plug_and_play(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
+                                self.parsed_status = None;
+                            }
+                            "HS" => {
+                                self.printer_info.host_status = PrinterInfo::parse_host_status(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
+                                self.parsed_status = None;
+                            }
+                            "SM" => {
+                                self.printer_info.sensor_media_status = PrinterInfo::parse_sensor_media_status(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
+                                self.parsed_status = None;
+                            }
+                            "AL" => {
+                                self.printer_info.alerts = PrinterInfo::parse_alerts(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
+                                self.parsed_status = None;
+                            }
+                            "ST" => {
+                                self.printer_info.supplies_status = PrinterInfo::parse_supplies_status(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
+                                self.parsed_status = None;
+                            }
+                            "BC" => {
+                                self.printer_info.battery_capacity = PrinterInfo::parse_battery_capacity(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
+                                self.parsed_status = None;
+                            }
+                            "LD" => {
+                                self.printer_info.label_dimensions = PrinterInfo::parse_label_dimensions(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
+                                self.parsed_status = None;
+                            }
+                            "FW" => {
+                                self.printer_info.firmware_version = PrinterInfo::parse_firmware_version(&cleaned_response);
+                                self.query_response = Some(cleaned_response.clone());
                                 self.parsed_status = None;
                             }
                             "ALL" => {
-                                let sections: Vec<&str> = response.split("===").collect();
+                                let sections: Vec<&str> = cleaned_response.split("===").collect();
                                 for section in sections {
                                     if section.contains("PRINTER STATUS") {
                                         let status_part = section.split("===").next().unwrap_or("");
@@ -1028,15 +1096,15 @@ impl State for Zebras {
                                         self.printer_info.plug_and_play = PrinterInfo::parse_plug_and_play(&data);
                                     }
                                 }
-                                self.query_response = Some(response);
+                                self.query_response = Some(cleaned_response.clone());
                             }
                             _ => {
-                                self.query_response = Some(response);
+                                self.query_response = Some(cleaned_response.clone());
                                 self.parsed_status = None;
                             }
                         }
                     } else {
-                        self.query_response = Some(response);
+                        self.query_response = Some(cleaned_response.clone());
                         self.parsed_status = None;
                     }
                 }
@@ -1339,6 +1407,11 @@ impl State for Zebras {
                                     if let Some(idx) = to_move_down {
                                         self.zpl_commands.swap(idx, idx + 1);
                                         self.is_dirty = true;
+                                    }
+
+                                    if self.needs_render_after_image {
+                                        self.needs_render_after_image = false;
+                                        self.render_zpl(ui_context);
                                     }
                                 });
                         }

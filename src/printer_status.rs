@@ -7,6 +7,13 @@ pub struct PrinterInfo {
     pub odometer: Option<OdometerInfo>,
     pub printhead_life: Option<PrintheadInfo>,
     pub plug_and_play: Option<String>,
+    pub host_status: Option<HostStatus>,
+    pub sensor_media_status: Option<SensorMediaStatus>,
+    pub alerts: Option<AlertInfo>,
+    pub supplies_status: Option<SuppliesStatus>,
+    pub firmware_version: Option<String>,
+    pub battery_capacity: Option<BatteryInfo>,
+    pub label_dimensions: Option<LabelDimensions>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +26,48 @@ pub struct OdometerInfo {
 pub struct PrintheadInfo {
     pub used_inches: String,
     pub total_labels: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostStatus {
+    pub communication_mode: String,
+    pub paper_out: bool,
+    pub pause: bool,
+    pub label_length: String,
+    pub labels_remaining: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SensorMediaStatus {
+    pub media_type: String,
+    pub sensor_profile: String,
+    pub media_detected: bool,
+    pub ribbon_detected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AlertInfo {
+    pub active_alerts: Vec<String>,
+    pub raw_codes: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SuppliesStatus {
+    pub media_status: String,
+    pub ribbon_status: String,
+    pub media_remaining_percent: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BatteryInfo {
+    pub charge_percent: String,
+    pub charging: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LabelDimensions {
+    pub width: String,
+    pub height: String,
 }
 
 impl PrinterInfo {
@@ -87,6 +136,121 @@ impl PrinterInfo {
             .join("\n");
         if !cleaned.is_empty() {
             Some(cleaned)
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_host_status(response: &str) -> Option<HostStatus> {
+        let lines: Vec<&str> = response.lines().collect();
+        if lines.len() >= 4 {
+            Some(HostStatus {
+                communication_mode: lines.get(0).unwrap_or(&"").trim().to_string(),
+                paper_out: lines.get(1).unwrap_or(&"0").trim() == "1",
+                pause: lines.get(2).unwrap_or(&"0").trim() == "1",
+                label_length: lines.get(3).unwrap_or(&"0").trim().to_string(),
+                labels_remaining: lines.get(4).unwrap_or(&"0").trim().to_string(),
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_sensor_media_status(response: &str) -> Option<SensorMediaStatus> {
+        let lines: Vec<&str> = response.lines().collect();
+        if !lines.is_empty() {
+            Some(SensorMediaStatus {
+                media_type: lines.get(0).unwrap_or(&"Unknown").trim().to_string(),
+                sensor_profile: lines.get(1).unwrap_or(&"Unknown").trim().to_string(),
+                media_detected: lines.get(2).unwrap_or(&"0").trim() == "1",
+                ribbon_detected: lines.get(3).unwrap_or(&"0").trim() == "1",
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_alerts(response: &str) -> Option<AlertInfo> {
+        if response.trim().is_empty() || response.trim() == "0" {
+            return None;
+        }
+
+        let mut alerts = Vec::new();
+        for line in response.lines() {
+            let line = line.trim();
+            if !line.is_empty() && line != "0" {
+                let alert_desc = match line {
+                    "1" => "Head Open",
+                    "2" => "Ribbon Out",
+                    "3" => "Media Out",
+                    "4" => "Cutter Fault",
+                    _ => line,
+                };
+                alerts.push(alert_desc.to_string());
+            }
+        }
+
+        if alerts.is_empty() {
+            None
+        } else {
+            Some(AlertInfo {
+                active_alerts: alerts,
+                raw_codes: response.to_string(),
+            })
+        }
+    }
+
+    pub fn parse_supplies_status(response: &str) -> Option<SuppliesStatus> {
+        let lines: Vec<&str> = response.lines().collect();
+        if !lines.is_empty() {
+            let media_status = lines.get(0).unwrap_or(&"Unknown").trim();
+            let ribbon_status = lines.get(1).unwrap_or(&"Unknown").trim();
+            let percent_str = lines.get(2).unwrap_or(&"");
+            let media_percent = percent_str.trim().parse::<u8>().ok();
+
+            Some(SuppliesStatus {
+                media_status: media_status.to_string(),
+                ribbon_status: ribbon_status.to_string(),
+                media_remaining_percent: media_percent,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_battery_capacity(response: &str) -> Option<BatteryInfo> {
+        let line = response.lines().next()?.trim();
+        if line.is_empty() {
+            return None;
+        }
+
+        let charging = line.contains("CHARGING") || line.contains("CHG");
+        let percent = line.chars()
+            .filter(|c| c.is_numeric())
+            .collect::<String>();
+
+        Some(BatteryInfo {
+            charge_percent: if percent.is_empty() { line.to_string() } else { format!("{}%", percent) },
+            charging,
+        })
+    }
+
+    pub fn parse_label_dimensions(response: &str) -> Option<LabelDimensions> {
+        let lines: Vec<&str> = response.lines().collect();
+        if lines.len() >= 2 {
+            Some(LabelDimensions {
+                width: lines[0].trim().to_string(),
+                height: lines[1].trim().to_string(),
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_firmware_version(response: &str) -> Option<String> {
+        let cleaned = response.trim();
+        if !cleaned.is_empty() {
+            Some(cleaned.to_string())
         } else {
             None
         }
