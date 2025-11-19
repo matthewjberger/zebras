@@ -1,7 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
-use std::net::TcpStream;
+use std::io::{Read, Write};
 #[cfg(not(target_arch = "wasm32"))]
-use std::io::{Write, Read};
+use std::net::TcpStream;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
@@ -23,13 +23,14 @@ impl ZplPrinter {
     }
 }
 
-
 #[cfg(not(target_arch = "wasm32"))]
 pub fn send_to_printer(printer: &ZplPrinter, zpl: &str) -> Result<(), String> {
     let addr = format!("{}:{}", printer.ip, printer.port);
 
     let mut stream = TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| format!("Invalid address: {}", e))?,
+        &addr
+            .parse()
+            .map_err(|e| format!("Invalid address: {}", e))?,
         Duration::from_secs(5),
     )
     .map_err(|e| format!("Failed to connect to printer: {}", e))?;
@@ -59,7 +60,9 @@ pub fn query_printer(printer: &ZplPrinter, query: &str) -> Result<String, String
     let addr = format!("{}:{}", printer.ip, printer.port);
 
     let mut stream = TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| format!("Invalid address: {}", e))?,
+        &addr
+            .parse()
+            .map_err(|e| format!("Invalid address: {}", e))?,
         Duration::from_secs(5),
     )
     .map_err(|e| format!("Failed to connect to printer: {}", e))?;

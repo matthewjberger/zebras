@@ -14,13 +14,18 @@ pub enum ZplPrefix {
 pub enum ZplCommand {
     StartFormat,
     EndFormat,
-    FieldOrigin { x: u32, y: u32 },
+    FieldOrigin {
+        x: u32,
+        y: u32,
+    },
     Font {
         orientation: FontOrientation,
         height: u32,
         width: u32,
     },
-    FieldData { data: String },
+    FieldData {
+        data: String,
+    },
     FieldSeparator,
     GraphicBox {
         width: u32,
@@ -29,9 +34,18 @@ pub enum ZplCommand {
         color: Option<char>,
         rounding: Option<u8>,
     },
-    ChangeFont { font: String, size: u32 },
-    FieldOrientation { rotation: FieldRotation },
-    BarcodeFieldDefault { width: u32, ratio: f32, height: u32 },
+    ChangeFont {
+        font: String,
+        size: u32,
+    },
+    FieldOrientation {
+        rotation: FieldRotation,
+    },
+    BarcodeFieldDefault {
+        width: u32,
+        ratio: f32,
+        height: u32,
+    },
     Code128Barcode {
         orientation: FieldOrientation,
         height: u32,
@@ -88,10 +102,7 @@ impl ZplCommand {
         vec![
             ("Start Format (^XA)", ZplCommand::StartFormat),
             ("End Format (^XZ)", ZplCommand::EndFormat),
-            (
-                "Field Origin (^FO)",
-                ZplCommand::FieldOrigin { x: 0, y: 0 },
-            ),
+            ("Field Origin (^FO)", ZplCommand::FieldOrigin { x: 0, y: 0 }),
             (
                 "Font (^A0)",
                 ZplCommand::Font {
@@ -198,19 +209,48 @@ impl ZplCommand {
                 if *check_digit { "Y" } else { "N" },
                 mode
             ),
-            ZplCommand::GraphicField { width, height, data } => {
+            ZplCommand::GraphicField {
+                width,
+                height,
+                data,
+            } => {
                 let bytes_per_row = (width + 7) / 8;
                 let total_bytes = bytes_per_row * height;
-                let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
-                format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
+                let clean_data = data
+                    .replace(",", "")
+                    .replace(" ", "")
+                    .replace("\n", "")
+                    .replace("\r", "")
+                    .to_uppercase();
+                format!(
+                    "^GFA,{},{},{},{}",
+                    total_bytes, total_bytes, bytes_per_row, clean_data
+                )
             }
-            ZplCommand::DownloadGraphic { name, width, height, data } => {
+            ZplCommand::DownloadGraphic {
+                name,
+                width,
+                height,
+                data,
+            } => {
                 let bytes_per_row = (width + 7) / 8;
                 let total_bytes = bytes_per_row * height;
-                let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
-                format!("~DG{},{},{},{}", name, total_bytes, bytes_per_row, clean_data)
+                let clean_data = data
+                    .replace(",", "")
+                    .replace(" ", "")
+                    .replace("\n", "")
+                    .replace("\r", "")
+                    .to_uppercase();
+                format!(
+                    "~DG{},{},{},{}",
+                    name, total_bytes, bytes_per_row, clean_data
+                )
             }
-            ZplCommand::RecallGraphic { name, magnification_x, magnification_y } => {
+            ZplCommand::RecallGraphic {
+                name,
+                magnification_x,
+                magnification_y,
+            } => {
                 format!("^XG{},{},{}", name, magnification_x, magnification_y)
             }
             ZplCommand::MediaModeDelayed => "^MMD".to_string(),
@@ -413,19 +453,48 @@ impl ZplLabel {
                         mode
                     )
                 }
-                ZplCommand::GraphicField { width, height, data } => {
+                ZplCommand::GraphicField {
+                    width,
+                    height,
+                    data,
+                } => {
                     let bytes_per_row = (width + 7) / 8;
                     let total_bytes = bytes_per_row * height;
-                    let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
-                    format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
+                    let clean_data = data
+                        .replace(",", "")
+                        .replace(" ", "")
+                        .replace("\n", "")
+                        .replace("\r", "")
+                        .to_uppercase();
+                    format!(
+                        "^GFA,{},{},{},{}",
+                        total_bytes, total_bytes, bytes_per_row, clean_data
+                    )
                 }
-                ZplCommand::DownloadGraphic { name, width, height, data } => {
+                ZplCommand::DownloadGraphic {
+                    name,
+                    width,
+                    height,
+                    data,
+                } => {
                     let bytes_per_row = (width + 7) / 8;
                     let total_bytes = bytes_per_row * height;
-                    let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
-                    format!("~DG{},{},{},{}", name, total_bytes, bytes_per_row, clean_data)
+                    let clean_data = data
+                        .replace(",", "")
+                        .replace(" ", "")
+                        .replace("\n", "")
+                        .replace("\r", "")
+                        .to_uppercase();
+                    format!(
+                        "~DG{},{},{},{}",
+                        name, total_bytes, bytes_per_row, clean_data
+                    )
                 }
-                ZplCommand::RecallGraphic { name, magnification_x, magnification_y } => {
+                ZplCommand::RecallGraphic {
+                    name,
+                    magnification_x,
+                    magnification_y,
+                } => {
                     format!("^XG{},{},{}", name, magnification_x, magnification_y)
                 }
                 ZplCommand::MediaModeDelayed => format!("^MMD"),
@@ -481,10 +550,7 @@ fn rgb_to_grayscale(pixel: Rgba<u8>) -> u8 {
     ((r * 299 + g * 587 + b * 114) / 1000) as u8
 }
 
-pub fn create_graphic_field_from_image(
-    image: &DynamicImage,
-    threshold: u8,
-) -> ZplCommand {
+pub fn create_graphic_field_from_image(image: &DynamicImage, threshold: u8) -> ZplCommand {
     let width = image.width();
     let height = image.height();
     let data = image_to_zpl_hex(image, threshold);
@@ -513,17 +579,23 @@ pub fn parse_graphic_field_from_zpl(zpl: &str) -> Option<(u32, u32, String)> {
                 let total_bytes = parts[0].trim().parse::<u32>().ok()?;
                 let bytes_per_row = parts[2].trim().parse::<u32>().ok()?;
 
-                let hex_data_parts: Vec<&str> = parts[3..].iter()
+                let hex_data_parts: Vec<&str> = parts[3..]
+                    .iter()
                     .flat_map(|s| s.split_whitespace())
                     .collect();
-                let hex_data = hex_data_parts.join("")
+                let hex_data = hex_data_parts
+                    .join("")
                     .replace(",", "")
                     .replace(" ", "")
                     .replace("\n", "")
                     .replace("\r", "")
                     .to_uppercase();
 
-                let height = if bytes_per_row > 0 { total_bytes / bytes_per_row } else { 0 };
+                let height = if bytes_per_row > 0 {
+                    total_bytes / bytes_per_row
+                } else {
+                    0
+                };
                 let width = bytes_per_row * 8;
 
                 return Some((width, height, hex_data));
@@ -533,4 +605,3 @@ pub fn parse_graphic_field_from_zpl(zpl: &str) -> Option<(u32, u32, String)> {
 
     None
 }
-

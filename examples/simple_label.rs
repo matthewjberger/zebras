@@ -1,6 +1,6 @@
 use zebras::{
     printer::{ZplPrinter, send_to_printer},
-    zpl::{ZplCommand, FontOrientation, commands_to_zpl},
+    zpl::{FontOrientation, ZplCommand, commands_to_zpl},
 };
 
 fn main() -> Result<(), String> {

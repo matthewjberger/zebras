@@ -67,15 +67,19 @@ impl LabelaryClient {
             image::ImageFormat::Jpeg => "jpg",
             image::ImageFormat::Gif => "gif",
             image::ImageFormat::Bmp => "bmp",
-            _ => return Err(format!("Unsupported image format: {:?}. Use PNG, JPG, GIF, or BMP", image_format)),
+            _ => {
+                return Err(format!(
+                    "Unsupported image format: {:?}. Use PNG, JPG, GIF, or BMP",
+                    image_format
+                ));
+            }
         };
 
         let client = blocking::Client::new();
-        let part = blocking::multipart::Part::bytes(image_bytes)
-            .file_name(format!("image.{}", extension));
+        let part =
+            blocking::multipart::Part::bytes(image_bytes).file_name(format!("image.{}", extension));
 
-        let form = blocking::multipart::Form::new()
-            .part("file", part);
+        let form = blocking::multipart::Form::new().part("file", part);
 
         let response = client
             .post("http://api.labelary.com/v1/graphics")
@@ -97,7 +101,9 @@ impl LabelaryClient {
                         Err(e) => Err(format!("Failed to read response text: {}", e)),
                     }
                 } else {
-                    let error_body = resp.text().unwrap_or_else(|_| "Unable to read error body".to_string());
+                    let error_body = resp
+                        .text()
+                        .unwrap_or_else(|_| "Unable to read error body".to_string());
                     Err(format!("API error ({}): {}", status.as_u16(), error_body))
                 }
             }

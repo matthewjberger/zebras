@@ -98,8 +98,12 @@ impl PrinterInfo {
             if line.len() == 12 && line.chars().all(|c| c.is_ascii_hexdigit()) {
                 let formatted = format!(
                     "{}:{}:{}:{}:{}:{}",
-                    &line[0..2], &line[2..4], &line[4..6],
-                    &line[6..8], &line[8..10], &line[10..12]
+                    &line[0..2],
+                    &line[2..4],
+                    &line[4..6],
+                    &line[6..8],
+                    &line[8..10],
+                    &line[10..12]
                 );
                 return Some(formatted);
             }
@@ -137,7 +141,8 @@ impl PrinterInfo {
     }
 
     pub fn parse_plug_and_play(response: &str) -> Option<String> {
-        let cleaned: String = response.lines()
+        let cleaned: String = response
+            .lines()
             .map(|l| l.trim())
             .filter(|l| !l.is_empty())
             .collect::<Vec<_>>()
@@ -233,12 +238,14 @@ impl PrinterInfo {
         }
 
         let charging = line.contains("CHARGING") || line.contains("CHG");
-        let percent = line.chars()
-            .filter(|c| c.is_numeric())
-            .collect::<String>();
+        let percent = line.chars().filter(|c| c.is_numeric()).collect::<String>();
 
         Some(BatteryInfo {
-            charge_percent: if percent.is_empty() { line.to_string() } else { format!("{}%", percent) },
+            charge_percent: if percent.is_empty() {
+                line.to_string()
+            } else {
+                format!("{}%", percent)
+            },
             charging,
         })
     }

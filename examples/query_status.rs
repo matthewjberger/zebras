@@ -1,6 +1,6 @@
 use zebras::{
     printer::{ZplPrinter, query_printer},
-    printer_status::{PrinterStatus, PrinterInfo},
+    printer_status::{PrinterInfo, PrinterStatus},
 };
 
 fn main() -> Result<(), String> {
@@ -14,29 +14,27 @@ fn main() -> Result<(), String> {
 
     println!("1. Printer Status (Errors/Warnings):");
     match query_printer(&printer, "~HQES\r\n") {
-        Ok(response) => {
-            match PrinterStatus::parse(&response) {
-                Ok(status) => {
-                    if status.is_ok() {
-                        println!("   ✓ Printer is operating normally");
-                    } else {
-                        if !status.errors.is_empty() {
-                            println!("   Errors:");
-                            for error in status.errors.to_descriptions() {
-                                println!("     - {}", error);
-                            }
+        Ok(response) => match PrinterStatus::parse(&response) {
+            Ok(status) => {
+                if status.is_ok() {
+                    println!("   ✓ Printer is operating normally");
+                } else {
+                    if !status.errors.is_empty() {
+                        println!("   Errors:");
+                        for error in status.errors.to_descriptions() {
+                            println!("     - {}", error);
                         }
-                        if !status.warnings.is_empty() {
-                            println!("   Warnings:");
-                            for warning in status.warnings.to_descriptions() {
-                                println!("     - {}", warning);
-                            }
+                    }
+                    if !status.warnings.is_empty() {
+                        println!("   Warnings:");
+                        for warning in status.warnings.to_descriptions() {
+                            println!("     - {}", warning);
                         }
                     }
                 }
-                Err(e) => println!("   Parse error: {}", e),
             }
-        }
+            Err(e) => println!("   Parse error: {}", e),
+        },
         Err(e) => println!("   Query error: {}", e),
     }
 
@@ -60,7 +58,9 @@ fn main() -> Result<(), String> {
                 println!("   Maximum Available: {} KB", memory.max_available_kb);
                 println!("   Currently Available: {} KB", memory.current_available_kb);
 
-                let used = memory.max_available_kb.saturating_sub(memory.current_available_kb);
+                let used = memory
+                    .max_available_kb
+                    .saturating_sub(memory.current_available_kb);
                 let percent = if memory.max_available_kb > 0 {
                     (used as f32 / memory.max_available_kb as f32) * 100.0
                 } else {

@@ -1,11 +1,11 @@
 extern crate alloc;
 
-pub mod zpl;
+pub mod labelary;
 pub mod printer;
 pub mod printer_status;
-pub mod labelary;
+pub mod zpl;
 
-pub use zpl::*;
+pub use labelary::*;
 pub use printer::*;
 pub use printer_status::*;
-pub use labelary::*;
+pub use zpl::*;
