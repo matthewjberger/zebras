@@ -34,6 +34,8 @@ pub enum ZplCommand {
         width: u32,
         height: u32,
         thickness: u32,
+        color: Option<char>,
+        rounding: Option<u8>,
     },
     #[enum2str("CF")]
     ChangeFont { font: String, size: u32 },
@@ -114,6 +116,8 @@ impl ZplCommand {
                     width: 100,
                     height: 100,
                     thickness: 1,
+                    color: None,
+                    rounding: None,
                 },
             ),
             (
@@ -143,7 +147,20 @@ impl ZplCommand {
                 width,
                 height,
                 thickness,
-            } => format!("^GB{},{},{}", width, height, thickness),
+                color,
+                rounding,
+            } => {
+                let mut result = format!("^GB{},{},{}", width, height, thickness);
+                if let Some(color_char) = color {
+                    result.push_str(&format!(",{}", color_char));
+                    if let Some(rounding_value) = rounding {
+                        result.push_str(&format!(",{}", rounding_value));
+                    }
+                } else if let Some(rounding_value) = rounding {
+                    result.push_str(&format!(",,{}", rounding_value));
+                }
+                result
+            }
             ZplCommand::ChangeFont { font, size } => format!("^CF{},{}", font, size),
             ZplCommand::FieldOrientation { rotation } => format!("^FW{}", rotation),
             ZplCommand::BarcodeFieldDefault {
@@ -271,6 +288,8 @@ impl ZplLabel {
             width,
             height,
             thickness,
+            color: None,
+            rounding: None,
         });
         self
     }
@@ -309,8 +328,19 @@ impl ZplLabel {
                     width,
                     height,
                     thickness,
+                    color,
+                    rounding,
                 } => {
-                    format!("^GB{},{},{}", width, height, thickness)
+                    let mut result = format!("^GB{},{},{}", width, height, thickness);
+                    if let Some(color_char) = color {
+                        result.push_str(&format!(",{}", color_char));
+                        if let Some(rounding_value) = rounding {
+                            result.push_str(&format!(",{}", rounding_value));
+                        }
+                    } else if let Some(rounding_value) = rounding {
+                        result.push_str(&format!(",,{}", rounding_value));
+                    }
+                    result
                 }
                 ZplCommand::ChangeFont { font, size } => format!("^CF{},{}", font, size),
                 ZplCommand::FieldOrientation { rotation } => format!("^FW{}", rotation),

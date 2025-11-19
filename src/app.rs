@@ -55,6 +55,8 @@ impl Default for Zebras {
                 width: 300,
                 height: 2,
                 thickness: 2,
+                color: None,
+                rounding: None,
             },
             ZplCommand::FieldSeparator,
             ZplCommand::FieldOrigin { x: 50, y: 200 },
@@ -161,6 +163,8 @@ impl Zebras {
                         width: 300,
                         height: 2,
                         thickness: 2,
+                        color: None,
+                        rounding: None,
                     },
                     ZplCommand::FieldSeparator,
                     ZplCommand::FieldOrigin { x: 50, y: 200 },
@@ -335,6 +339,8 @@ impl Zebras {
                         width: 320,
                         height: 1,
                         thickness: 1,
+                        color: None,
+                        rounding: None,
                     },
                     ZplCommand::FieldSeparator,
                     ZplCommand::FieldOrigin { x: 40, y: 180 },
@@ -668,20 +674,57 @@ impl Zebras {
                 width,
                 height,
                 thickness,
+                color,
+                rounding,
             } => {
-                ui.horizontal(|ui| {
-                    ui.label("W:");
-                    if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
-                        self.is_dirty = true;
-                    }
-                    ui.label("H:");
-                    if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
-                        self.is_dirty = true;
-                    }
-                    ui.label("T:");
-                    if ui.add(egui::DragValue::new(thickness).speed(1)).lost_focus() {
-                        self.is_dirty = true;
-                    }
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("W:");
+                        if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                        ui.label("H:");
+                        if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                        ui.label("T:");
+                        if ui.add(egui::DragValue::new(thickness).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Color:");
+                        let mut color_selection = match color {
+                            Some('B') => 0,
+                            Some('W') => 1,
+                            _ => 2,
+                        };
+                        let prev_selection = color_selection;
+                        ui.radio_value(&mut color_selection, 0, "Black");
+                        ui.radio_value(&mut color_selection, 1, "White");
+                        ui.radio_value(&mut color_selection, 2, "Default");
+                        if color_selection != prev_selection {
+                            *color = match color_selection {
+                                0 => Some('B'),
+                                1 => Some('W'),
+                                _ => None,
+                            };
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Rounding:");
+                        let mut rounding_value = rounding.unwrap_or(0);
+                        if ui.add(egui::Slider::new(&mut rounding_value, 0..=8)).changed() {
+                            *rounding = if rounding_value > 0 {
+                                Some(rounding_value)
+                            } else {
+                                None
+                            };
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.label(egui::RichText::new("Tip: For horizontal line, set height=1-5. For vertical line, set width=1-5").small().color(egui::Color32::GRAY));
                 });
             }
             ZplCommand::GraphicField { width, height, data } => {
