@@ -4,7 +4,7 @@ use zebras::{
     labelary::LabelaryClient,
     printer::ZplPrinter,
     printer_status::*,
-    zpl::{commands_to_zpl, parse_graphic_field_from_zpl, FieldOrientation, FontOrientation, ZplCommand},
+    zpl::{commands_to_zpl, FieldOrientation, FontOrientation, ZplCommand},
 };
 
 pub struct Zebras {
@@ -402,6 +402,38 @@ impl Zebras {
                         name: "LOGO".to_string(),
                         magnification_x: 1,
                         magnification_y: 1,
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::EndFormat,
+                ],
+            ),
+            (
+                "Framed Label with Image",
+                vec![
+                    ZplCommand::StartFormat,
+                    ZplCommand::FieldOrigin { x: 40, y: 20 },
+                    ZplCommand::GraphicBox {
+                        width: 760,
+                        height: 570,
+                        thickness: 8,
+                        color: Some('B'),
+                        rounding: Some(2),
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::FieldOrigin { x: 40, y: 150 },
+                    ZplCommand::GraphicBox {
+                        width: 760,
+                        height: 0,
+                        thickness: 8,
+                        color: Some('B'),
+                        rounding: None,
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::FieldOrigin { x: 0, y: 30 },
+                    ZplCommand::GraphicField {
+                        width: 400,
+                        height: 86,
+                        data: String::new(),
                     },
                     ZplCommand::FieldSeparator,
                     ZplCommand::EndFormat,
@@ -836,124 +868,7 @@ impl Zebras {
                     ui.separator();
                     ui.label("Load from image:");
                     ui.horizontal(|ui| {
-                        if ui.button("Select Image (Labelary API)").clicked() {
-                            self.image_load_status = Some("Opening file dialog...".to_string());
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif"])
-                                .pick_file()
-                            {
-                                self.image_load_status = Some(format!("Loading {:?}...", path.file_name()));
-                                #[cfg(not(target_arch = "wasm32"))]
-                                {
-                                    match std::fs::read(&path) {
-                                        Ok(file_bytes) => {
-                                            if file_bytes.len() > 200_000 {
-                                                match image::open(&path) {
-                                                    Ok(loaded_image) => {
-                                                        self.image_load_status = Some(format!(
-                                                            "Resizing {}x{} image...",
-                                                            loaded_image.width(),
-                                                            loaded_image.height()
-                                                        ));
-                                                        let max_dimension = 1000;
-                                                        let scale = (max_dimension as f32 / loaded_image.width().max(loaded_image.height()) as f32).min(1.0);
-                                                        let new_width = (loaded_image.width() as f32 * scale) as u32;
-                                                        let new_height = (loaded_image.height() as f32 * scale) as u32;
-                                                        let resized_image = loaded_image.resize(new_width, new_height, image::imageops::FilterType::Lanczos3);
-
-                                                        self.image_load_status = Some("Encoding as PNG...".to_string());
-                                                        let mut png_bytes = Vec::new();
-                                                        let encode_result = {
-                                                            use image::codecs::png::PngEncoder;
-                                                            use image::ImageEncoder;
-                                                            let rgba = resized_image.to_rgba8();
-                                                            let encoder = PngEncoder::new(&mut png_bytes);
-                                                            encoder.write_image(
-                                                                rgba.as_raw(),
-                                                                resized_image.width(),
-                                                                resized_image.height(),
-                                                                image::ExtendedColorType::Rgba8
-                                                            )
-                                                        };
-
-                                                        if let Err(e) = encode_result {
-                                                            self.image_load_status = Some(format!("Encode failed: {}", e));
-                                                        } else if png_bytes.is_empty() {
-                                                            self.image_load_status = Some("Empty PNG data".to_string());
-                                                        } else {
-                                                            self.image_load_status = Some(format!("Sending {}KB...", png_bytes.len() / 1024));
-                                                            let client = LabelaryClient::default();
-                                                            match client.convert_image_to_zpl_sync(png_bytes) {
-                                                Ok(zpl_response) => {
-                                                    self.image_load_status = Some("Parsing ZPL response...".to_string());
-                                                    if let Some((parsed_width, parsed_height, hex_data)) = parse_graphic_field_from_zpl(&zpl_response) {
-                                                        *width = parsed_width;
-                                                        *height = parsed_height;
-                                                        *data = hex_data;
-                                                        self.image_load_status = Some(format!(
-                                                            "Image loaded! {}x{}, {} chars - rendering...",
-                                                            width, height, data.len()
-                                                        ));
-                                                        self.needs_render_after_image = true;
-                                                    } else {
-                                                        self.image_load_status = Some(format!(
-                                                            "Failed to parse ZPL response. Response: {}",
-                                                            &zpl_response[..zpl_response.len().min(200)]
-                                                        ));
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    self.image_load_status = Some(format!("API error: {}", e));
-                                                }
-                                            }
-                                                                                                }
-                                                                                            }
-                                                                                            Err(e) => {
-                                                                                                self.image_load_status = Some(format!("Failed to load image for resizing: {}", e));
-                                                                                            }
-                                                                                        }
-                                            } else {
-                                                self.image_load_status = Some(format!("Sending {}KB directly...", file_bytes.len() / 1024));
-                                                let client = LabelaryClient::default();
-                                                match client.convert_image_to_zpl_sync(file_bytes) {
-                                                    Ok(zpl_response) => {
-                                                        self.image_load_status = Some("Parsing ZPL response...".to_string());
-                                                        if let Some((parsed_width, parsed_height, hex_data)) = parse_graphic_field_from_zpl(&zpl_response) {
-                                                            *width = parsed_width;
-                                                            *height = parsed_height;
-                                                            *data = hex_data;
-                                                            self.image_load_status = Some(format!(
-                                                                "Image loaded! {}x{}, {} chars - rendering...",
-                                                                width, height, data.len()
-                                                            ));
-                                                            self.needs_render_after_image = true;
-                                                        } else {
-                                                            self.image_load_status = Some(format!(
-                                                                "Failed to parse ZPL response. Response: {}",
-                                                                &zpl_response[..zpl_response.len().min(200)]
-                                                            ));
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        self.image_load_status = Some(format!("API error: {}", e));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            self.image_load_status = Some(format!("Failed to read file: {}", e));
-                                        }
-                                    }
-                                }
-                                #[cfg(target_arch = "wasm32")]
-                                {
-                                    self.image_load_status = Some("Image upload not available in WASM".to_string());
-                                }
-                            } else {
-                                self.image_load_status = Some("No file selected".to_string());
-                            }
-                        }
-                        if ui.button("Select Image (Local)").clicked() {
+                        if ui.button("Select Image").clicked() {
                             self.image_load_status = Some("Opening file dialog...".to_string());
                             if let Some(path) = rfd::FileDialog::new()
                                 .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif"])
@@ -991,7 +906,7 @@ impl Zebras {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Threshold (Local only):");
+                        ui.label("Threshold:");
                         ui.add(egui::Slider::new(&mut self.graphic_threshold, 0..=255));
                     });
                     ui.label(egui::RichText::new("(Lower = more black, Higher = more white)").small().color(egui::Color32::GRAY));
@@ -1029,124 +944,7 @@ impl Zebras {
                     ui.separator();
                     ui.label("Load from image:");
                     ui.horizontal(|ui| {
-                        if ui.button("Select Image (Labelary API)").clicked() {
-                            self.image_load_status = Some("Opening file dialog...".to_string());
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif"])
-                                .pick_file()
-                            {
-                                self.image_load_status = Some(format!("Loading {:?}...", path.file_name()));
-                                #[cfg(not(target_arch = "wasm32"))]
-                                {
-                                    match std::fs::read(&path) {
-                                        Ok(file_bytes) => {
-                                            if file_bytes.len() > 200_000 {
-                                                match image::open(&path) {
-                                                    Ok(loaded_image) => {
-                                                        self.image_load_status = Some(format!(
-                                                            "Resizing {}x{} image...",
-                                                            loaded_image.width(),
-                                                            loaded_image.height()
-                                                        ));
-                                                        let max_dimension = 1000;
-                                                        let scale = (max_dimension as f32 / loaded_image.width().max(loaded_image.height()) as f32).min(1.0);
-                                                        let new_width = (loaded_image.width() as f32 * scale) as u32;
-                                                        let new_height = (loaded_image.height() as f32 * scale) as u32;
-                                                        let resized_image = loaded_image.resize(new_width, new_height, image::imageops::FilterType::Lanczos3);
-
-                                                        self.image_load_status = Some("Encoding as PNG...".to_string());
-                                                        let mut png_bytes = Vec::new();
-                                                        let encode_result = {
-                                                            use image::codecs::png::PngEncoder;
-                                                            use image::ImageEncoder;
-                                                            let rgba = resized_image.to_rgba8();
-                                                            let encoder = PngEncoder::new(&mut png_bytes);
-                                                            encoder.write_image(
-                                                                rgba.as_raw(),
-                                                                resized_image.width(),
-                                                                resized_image.height(),
-                                                                image::ExtendedColorType::Rgba8
-                                                            )
-                                                        };
-
-                                                        if let Err(e) = encode_result {
-                                                            self.image_load_status = Some(format!("Encode failed: {}", e));
-                                                        } else if png_bytes.is_empty() {
-                                                            self.image_load_status = Some("Empty PNG data".to_string());
-                                                        } else {
-                                                            self.image_load_status = Some(format!("Sending {}KB...", png_bytes.len() / 1024));
-                                                            let client = LabelaryClient::default();
-                                                            match client.convert_image_to_zpl_sync(png_bytes) {
-                                                Ok(zpl_response) => {
-                                                    self.image_load_status = Some("Parsing ZPL response...".to_string());
-                                                    if let Some((parsed_width, parsed_height, hex_data)) = parse_graphic_field_from_zpl(&zpl_response) {
-                                                        *width = parsed_width;
-                                                        *height = parsed_height;
-                                                        *data = hex_data;
-                                                        self.image_load_status = Some(format!(
-                                                            "Image loaded! {}x{}, {} chars - rendering...",
-                                                            width, height, data.len()
-                                                        ));
-                                                        self.needs_render_after_image = true;
-                                                    } else {
-                                                        self.image_load_status = Some(format!(
-                                                            "Failed to parse ZPL response. Response: {}",
-                                                            &zpl_response[..zpl_response.len().min(200)]
-                                                        ));
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    self.image_load_status = Some(format!("API error: {}", e));
-                                                }
-                                            }
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        self.image_load_status = Some(format!("Failed to load image for resizing: {}", e));
-                                                    }
-                                                }
-                                            } else {
-                                                self.image_load_status = Some(format!("Sending {}KB directly...", file_bytes.len() / 1024));
-                                                let client = LabelaryClient::default();
-                                                match client.convert_image_to_zpl_sync(file_bytes) {
-                                                    Ok(zpl_response) => {
-                                                        self.image_load_status = Some("Parsing ZPL response...".to_string());
-                                                        if let Some((parsed_width, parsed_height, hex_data)) = parse_graphic_field_from_zpl(&zpl_response) {
-                                                            *width = parsed_width;
-                                                            *height = parsed_height;
-                                                            *data = hex_data;
-                                                            self.image_load_status = Some(format!(
-                                                                "Image loaded! {}x{}, {} chars - rendering...",
-                                                                width, height, data.len()
-                                                            ));
-                                                            self.needs_render_after_image = true;
-                                                        } else {
-                                                            self.image_load_status = Some(format!(
-                                                                "Failed to parse ZPL response. Response: {}",
-                                                                &zpl_response[..zpl_response.len().min(200)]
-                                                            ));
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        self.image_load_status = Some(format!("API error: {}", e));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            self.image_load_status = Some(format!("Failed to read file: {}", e));
-                                        }
-                                    }
-                                }
-                                #[cfg(target_arch = "wasm32")]
-                                {
-                                    self.image_load_status = Some("Image upload not available in WASM".to_string());
-                                }
-                            } else {
-                                self.image_load_status = None;
-                            }
-                        }
-                        if ui.button("Select Image (Local)").clicked() {
+                        if ui.button("Select Image").clicked() {
                             self.image_load_status = Some("Opening file dialog...".to_string());
                             if let Some(path) = rfd::FileDialog::new()
                                 .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif"])
@@ -1184,7 +982,7 @@ impl Zebras {
                         }
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Threshold (Local only):");
+                        ui.label("Threshold:");
                         ui.add(egui::Slider::new(&mut self.graphic_threshold, 0..=255));
                     });
                     ui.label(egui::RichText::new("(Lower = more black, Higher = more white)").small().color(egui::Color32::GRAY));
