@@ -34,6 +34,7 @@ pub struct Zebras {
     printer_info: PrinterInfo,
     last_query_type: Option<String>,
     show_query_window: bool,
+    print_copies: u32,
 }
 
 impl Default for Zebras {
@@ -195,6 +196,7 @@ impl Default for Zebras {
             printer_info: PrinterInfo::default(),
             last_query_type: None,
             show_query_window: false,
+            print_copies: 1,
         }
     }
 }
@@ -218,450 +220,6 @@ impl Zebras {
         }
     }
 
-    fn get_presets() -> Vec<(&'static str, Vec<ZplCommand>)> {
-        vec![
-            (
-                "Hello World",
-                vec![
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 50, y: 50 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 50,
-                        width: 50,
-                    },
-                    ZplCommand::FieldData {
-                        data: "Hello World!".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 50, y: 150 },
-                    ZplCommand::GraphicBox {
-                        width: 300,
-                        height: 2,
-                        thickness: 2,
-                        color: None,
-                        rounding: None,
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 50, y: 200 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 30,
-                        width: 30,
-                    },
-                    ZplCommand::FieldData {
-                        data: "Zebra ZPL Simulator".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
-            ),
-            (
-                "Shipping Label",
-                vec![
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 20, y: 20 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 40,
-                        width: 40,
-                    },
-                    ZplCommand::FieldData {
-                        data: "SHIP TO:".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 20, y: 80 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 30,
-                        width: 30,
-                    },
-                    ZplCommand::FieldData {
-                        data: "John Smith".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 20, y: 120 },
-                    ZplCommand::FieldData {
-                        data: "123 Main Street".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 20, y: 160 },
-                    ZplCommand::FieldData {
-                        data: "Anytown, ST 12345".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 20, y: 220 },
-                    ZplCommand::BarcodeFieldDefault {
-                        width: 2,
-                        ratio: 3.0,
-                        height: 80,
-                    },
-                    ZplCommand::Code128Barcode {
-                        orientation: FieldOrientation::Normal,
-                        height: 80,
-                        print_interpretation: true,
-                        print_above: false,
-                        check_digit: false,
-                        mode: FieldOrientation::Normal,
-                    },
-                    ZplCommand::FieldData {
-                        data: "1234567890".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
-            ),
-            (
-                "Product Label",
-                vec![
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 30, y: 30 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 35,
-                        width: 35,
-                    },
-                    ZplCommand::FieldData {
-                        data: "Product Name".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 30, y: 80 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 25,
-                        width: 25,
-                    },
-                    ZplCommand::FieldData {
-                        data: "SKU: ABC-123".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 30, y: 110 },
-                    ZplCommand::FieldData {
-                        data: "Price: $19.99".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 30, y: 160 },
-                    ZplCommand::BarcodeFieldDefault {
-                        width: 2,
-                        ratio: 3.0,
-                        height: 60,
-                    },
-                    ZplCommand::Code128Barcode {
-                        orientation: FieldOrientation::Normal,
-                        height: 60,
-                        print_interpretation: true,
-                        print_above: false,
-                        check_digit: false,
-                        mode: FieldOrientation::Normal,
-                    },
-                    ZplCommand::FieldData {
-                        data: "ABC123456".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
-            ),
-            (
-                "Simple Barcode",
-                vec![
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 50, y: 50 },
-                    ZplCommand::BarcodeFieldDefault {
-                        width: 3,
-                        ratio: 3.0,
-                        height: 100,
-                    },
-                    ZplCommand::Code128Barcode {
-                        orientation: FieldOrientation::Normal,
-                        height: 100,
-                        print_interpretation: true,
-                        print_above: false,
-                        check_digit: false,
-                        mode: FieldOrientation::Normal,
-                    },
-                    ZplCommand::FieldData {
-                        data: "9876543210".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
-            ),
-            (
-                "Multi-Line Text",
-                vec![
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 40, y: 40 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 30,
-                        width: 30,
-                    },
-                    ZplCommand::FieldData {
-                        data: "Line 1 of Text".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 40, y: 80 },
-                    ZplCommand::FieldData {
-                        data: "Line 2 of Text".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 40, y: 120 },
-                    ZplCommand::FieldData {
-                        data: "Line 3 of Text".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 40, y: 160 },
-                    ZplCommand::GraphicBox {
-                        width: 320,
-                        height: 1,
-                        thickness: 1,
-                        color: None,
-                        rounding: None,
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 40, y: 180 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 25,
-                        width: 25,
-                    },
-                    ZplCommand::FieldData {
-                        data: "Line 4 of Text".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
-            ),
-            (
-                "Simple Graphic",
-                vec![
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 50, y: 50 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 30,
-                        width: 30,
-                    },
-                    ZplCommand::FieldData {
-                        data: "Graphic Below:".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 50, y: 100 },
-                    ZplCommand::GraphicField {
-                        width: 32,
-                        height: 32,
-                        data: "FFFFFFFFFFFFFFFFC0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003FFFFFFFFFFFFFFFF".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 50, y: 200 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 30,
-                        width: 30,
-                    },
-                    ZplCommand::FieldData {
-                        data: "32x32 Test Pattern".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
-            ),
-            (
-                "Download & Reuse Graphic",
-                vec![
-                    ZplCommand::DownloadGraphic {
-                        name: "LOGO".to_string(),
-                        width: 32,
-                        height: 32,
-                        data: "FFFFFFFFFFFFFFFFC0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003FFFFFFFFFFFFFFFF".to_string(),
-                    },
-                    ZplCommand::StartFormat,
-                    ZplCommand::FieldOrigin { x: 50, y: 50 },
-                    ZplCommand::Font {
-                        orientation: FontOrientation::Normal,
-                        height: 30,
-                        width: 30,
-                    },
-                    ZplCommand::FieldData {
-                        data: "Stored Graphics Demo".to_string(),
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 50, y: 100 },
-                    ZplCommand::RecallGraphic {
-                        name: "LOGO".to_string(),
-                        magnification_x: 1,
-                        magnification_y: 1,
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 150, y: 100 },
-                    ZplCommand::RecallGraphic {
-                        name: "LOGO".to_string(),
-                        magnification_x: 2,
-                        magnification_y: 2,
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 50, y: 200 },
-                    ZplCommand::RecallGraphic {
-                        name: "LOGO".to_string(),
-                        magnification_x: 1,
-                        magnification_y: 1,
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::FieldOrigin { x: 150, y: 200 },
-                    ZplCommand::RecallGraphic {
-                        name: "LOGO".to_string(),
-                        magnification_x: 1,
-                        magnification_y: 1,
-                    },
-                    ZplCommand::FieldSeparator,
-                    ZplCommand::EndFormat,
-                ],
-            ),
-            (
-                "Framed Label with Image",
-                {
-                    let logo_hex = Zebras::load_logo_hex();
-                    vec![
-                        ZplCommand::StartFormat,
-                        ZplCommand::FieldOrigin { x: 40, y: 20 },
-                        ZplCommand::GraphicBox {
-                            width: 760,
-                            height: 570,
-                            thickness: 8,
-                            color: Some('B'),
-                            rounding: Some(2),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 40, y: 150 },
-                        ZplCommand::GraphicBox {
-                            width: 760,
-                            height: 0,
-                            thickness: 8,
-                            color: Some('B'),
-                            rounding: None,
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 450, y: 60 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 40,
-                        },
-                        ZplCommand::FieldData {
-                            data: "BURRITO BOWL".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 10, y: 30 },
-                        ZplCommand::GraphicField {
-                            width: 400,
-                            height: 86,
-                            data: logo_hex,
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 100, y: 125 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 30,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "11/19/25".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 100, y: 170 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 35,
-                            width: 35,
-                        },
-                        ZplCommand::FieldData {
-                            data: "Bowl #1 (7 Ingredients)".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 120, y: 250 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "* White Rice".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 120, y: 300 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "* Black Beans".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 120, y: 350 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "* Fajita Veggies".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 120, y: 400 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "* Chicken".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 450, y: 250 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "* Hot Red Salsa".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 450, y: 300 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "* Corn Salsa".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 450, y: 350 },
-                        ZplCommand::Font {
-                            orientation: FontOrientation::Normal,
-                            height: 40,
-                            width: 30,
-                        },
-                        ZplCommand::FieldData {
-                            data: "* Romaine Lettuce".to_string(),
-                        },
-                        ZplCommand::FieldSeparator,
-                        ZplCommand::EndFormat,
-                    ]
-                },
-            ),
-        ]
-    }
-
-    fn load_preset(&mut self, preset_name: &str) {
-        let presets = Self::get_presets();
-        if let Some((_, commands)) = presets.iter().find(|(name, _)| *name == preset_name) {
-            self.zpl_commands = commands.clone();
-            self.is_dirty = true;
-        }
-    }
 
     fn save_template(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
@@ -734,11 +292,16 @@ impl Zebras {
 
                 zpl.push_str("^XA^MMT^XZ\n");
 
-                zpl.push_str(&self.get_zpl_text());
+                let label_zpl = self.get_zpl_text();
+
+                for _ in 0..self.print_copies {
+                    zpl.push_str(&label_zpl);
+                    zpl.push('\n');
+                }
 
                 match zebras::printer::send_to_printer(printer, &zpl) {
                     Ok(_) => {
-                        self.print_status = Some(format!("Sent to {}", printer.name));
+                        self.print_status = Some(format!("Sent {} copies to {}", self.print_copies, printer.name));
                     }
                     Err(e) => {
                         self.print_status = Some(format!("Print error: {}", e));
@@ -1598,34 +1161,7 @@ impl eframe::App for Zebras {
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("ZPL Simulator");
-                ui.separator();
-
-                ui.label("Preset:");
-                let preset_response = egui::ComboBox::from_id_salt(ui.next_auto_id())
-                    .selected_text("Load...")
-                    .show_ui(ui, |ui| {
-                        let mut clicked_preset = None;
-                        egui::ScrollArea::vertical()
-                            .max_height(300.0)
-                            .show(ui, |ui| {
-                                for (name, _) in Self::get_presets() {
-                                    if ui.selectable_label(false, name).clicked() {
-                                        clicked_preset = Some(name);
-                                    }
-                                }
-                            });
-                        clicked_preset
-                    });
-
-                if let Some(inner) = preset_response.inner {
-                    if let Some(preset_name) = inner {
-                        self.load_preset(preset_name);
-                        self.render_zpl(ctx);
-                        self.is_dirty = false;
-                    }
-                }
-
+                ui.heading("Burrito Bowl Label Designer");
                 ui.separator();
 
                 if ui.button("Save Template").clicked() {
@@ -1698,6 +1234,11 @@ impl eframe::App for Zebras {
                                     }
                                 });
                         });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Copies:");
+                        ui.add(egui::DragValue::new(&mut self.print_copies).speed(1).range(1..=100));
+                    });
 
                     if ui
                         .add_enabled(
