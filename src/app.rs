@@ -9,7 +9,34 @@ use zebras::{
 
 const LOGO_BYTES: &[u8] = include_bytes!("../logomark-white.png");
 
+pub struct LabelConfig {
+    title: String,
+    date: String,
+    bowl_description: String,
+    ingredients: Vec<String>,
+}
+
+impl Default for LabelConfig {
+    fn default() -> Self {
+        Self {
+            title: "BURRITO BOWL".to_string(),
+            date: "11/19/25".to_string(),
+            bowl_description: "Bowl #1 (7 Ingredients)".to_string(),
+            ingredients: vec![
+                "* White Rice".to_string(),
+                "* Black Beans".to_string(),
+                "* Fajita Veggies".to_string(),
+                "* Chicken".to_string(),
+                "* Hot Red Salsa".to_string(),
+                "* Corn Salsa".to_string(),
+                "* Romaine Lettuce".to_string(),
+            ],
+        }
+    }
+}
+
 pub struct Zebras {
+    label_config: LabelConfig,
     zpl_commands: Vec<ZplCommand>,
     rendered_image: Option<egui::TextureHandle>,
     is_dirty: bool,
@@ -39,139 +66,12 @@ pub struct Zebras {
 
 impl Default for Zebras {
     fn default() -> Self {
+        let label_config = LabelConfig::default();
         let logo_hex = Zebras::load_logo_hex();
-
-        let default_commands = vec![
-            ZplCommand::StartFormat,
-            ZplCommand::FieldOrigin { x: 40, y: 20 },
-            ZplCommand::GraphicBox {
-                width: 760,
-                height: 570,
-                thickness: 8,
-                color: Some('B'),
-                rounding: Some(2),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 40, y: 150 },
-            ZplCommand::GraphicBox {
-                width: 760,
-                height: 0,
-                thickness: 8,
-                color: Some('B'),
-                rounding: None,
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 450, y: 60 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 40,
-            },
-            ZplCommand::FieldData {
-                data: "BURRITO BOWL".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 10, y: 30 },
-            ZplCommand::GraphicField {
-                width: 400,
-                height: 86,
-                data: logo_hex,
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 100, y: 125 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 30,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "11/19/25".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 100, y: 170 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 35,
-                width: 35,
-            },
-            ZplCommand::FieldData {
-                data: "Bowl #1 (7 Ingredients)".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 120, y: 250 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "* White Rice".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 120, y: 300 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "* Black Beans".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 120, y: 350 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "* Fajita Veggies".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 120, y: 400 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "* Chicken".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 450, y: 250 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "* Hot Red Salsa".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 450, y: 300 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "* Corn Salsa".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 450, y: 350 },
-            ZplCommand::Font {
-                orientation: FontOrientation::Normal,
-                height: 40,
-                width: 30,
-            },
-            ZplCommand::FieldData {
-                data: "* Romaine Lettuce".to_string(),
-            },
-            ZplCommand::FieldSeparator,
-            ZplCommand::EndFormat,
-        ];
+        let default_commands = Zebras::build_commands_from_config(&label_config, &logo_hex);
 
         Self {
+            label_config,
             zpl_commands: default_commands,
             rendered_image: None,
             is_dirty: false,
@@ -202,6 +102,104 @@ impl Default for Zebras {
 }
 
 impl Zebras {
+    fn build_commands_from_config(config: &LabelConfig, logo_hex: &str) -> Vec<ZplCommand> {
+        let mut commands = vec![
+            ZplCommand::StartFormat,
+            ZplCommand::FieldOrigin { x: 40, y: 20 },
+            ZplCommand::GraphicBox {
+                width: 760,
+                height: 570,
+                thickness: 8,
+                color: Some('B'),
+                rounding: Some(2),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 40, y: 150 },
+            ZplCommand::GraphicBox {
+                width: 760,
+                height: 0,
+                thickness: 8,
+                color: Some('B'),
+                rounding: None,
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 450, y: 60 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 40,
+            },
+            ZplCommand::FieldData {
+                data: config.title.clone(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 10, y: 30 },
+            ZplCommand::GraphicField {
+                width: 400,
+                height: 86,
+                data: logo_hex.to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 100, y: 125 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 30,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: config.date.clone(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 100, y: 170 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 35,
+                width: 35,
+            },
+            ZplCommand::FieldData {
+                data: config.bowl_description.clone(),
+            },
+            ZplCommand::FieldSeparator,
+        ];
+
+        let mut column1_y = 250;
+        let mut column2_y = 250;
+        let ingredient_spacing = 50;
+
+        for (index, ingredient) in config.ingredients.iter().enumerate() {
+            let column1_items = (config.ingredients.len() + 1) / 2;
+
+            if index < column1_items {
+                commands.push(ZplCommand::FieldOrigin { x: 120, y: column1_y });
+                commands.push(ZplCommand::Font {
+                    orientation: FontOrientation::Normal,
+                    height: 40,
+                    width: 30,
+                });
+                commands.push(ZplCommand::FieldData {
+                    data: ingredient.clone(),
+                });
+                commands.push(ZplCommand::FieldSeparator);
+                column1_y += ingredient_spacing;
+            } else {
+                commands.push(ZplCommand::FieldOrigin { x: 450, y: column2_y });
+                commands.push(ZplCommand::Font {
+                    orientation: FontOrientation::Normal,
+                    height: 40,
+                    width: 30,
+                });
+                commands.push(ZplCommand::FieldData {
+                    data: ingredient.clone(),
+                });
+                commands.push(ZplCommand::FieldSeparator);
+                column2_y += ingredient_spacing;
+            }
+        }
+
+        commands.push(ZplCommand::EndFormat);
+        commands
+    }
+
     fn load_logo_hex() -> String {
         match image::load_from_memory(LOGO_BYTES) {
             Ok(img) => {
@@ -210,6 +208,12 @@ impl Zebras {
             }
             Err(_) => String::new(),
         }
+    }
+
+    fn apply_label_config(&mut self) {
+        let logo_hex = Zebras::load_logo_hex();
+        self.zpl_commands = Zebras::build_commands_from_config(&self.label_config, &logo_hex);
+        self.is_dirty = true;
     }
 
     fn get_zpl_text(&self) -> String {
@@ -1268,6 +1272,74 @@ impl eframe::App for Zebras {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            egui::TopBottomPanel::top("label_config_panel").show_inside(ui, |ui| {
+                ui.heading("Label Configuration");
+                ui.separator();
+
+                egui::Grid::new("label_config_grid")
+                    .num_columns(2)
+                    .spacing([20.0, 10.0])
+                    .show(ui, |ui| {
+                        ui.label("Title:");
+                        if ui.text_edit_singleline(&mut self.label_config.title).changed() {
+                            self.apply_label_config();
+                        }
+                        ui.end_row();
+
+                        ui.label("Date:");
+                        if ui.text_edit_singleline(&mut self.label_config.date).changed() {
+                            self.apply_label_config();
+                        }
+                        ui.end_row();
+
+                        ui.label("Bowl Description:");
+                        if ui.text_edit_singleline(&mut self.label_config.bowl_description).changed() {
+                            self.apply_label_config();
+                        }
+                        ui.end_row();
+                    });
+
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new("Ingredients:").strong());
+
+                egui::ScrollArea::vertical()
+                    .max_height(150.0)
+                    .show(ui, |ui| {
+                        let mut changed = false;
+                        let mut to_remove = None;
+
+                        for (index, ingredient) in self.label_config.ingredients.iter_mut().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{}.", index + 1));
+                                if ui.text_edit_singleline(ingredient).changed() {
+                                    changed = true;
+                                }
+                                if ui.button("Remove").clicked() {
+                                    to_remove = Some(index);
+                                    changed = true;
+                                }
+                            });
+                        }
+
+                        if let Some(index) = to_remove {
+                            self.label_config.ingredients.remove(index);
+                        }
+
+                        if changed {
+                            self.apply_label_config();
+                        }
+                    });
+
+                ui.horizontal(|ui| {
+                    if ui.button("Add Ingredient").clicked() {
+                        self.label_config.ingredients.push("* New Ingredient".to_string());
+                        self.apply_label_config();
+                    }
+                });
+
+                ui.separator();
+            });
+
             ui.columns(2, |columns| {
                 columns[0].vertical(|ui| {
                         ui.horizontal(|ui| {
