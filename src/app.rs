@@ -1,10 +1,11 @@
-use nightshade::prelude::*;
 use std::sync::{Arc, Mutex};
 
-use crate::labelary::LabelaryClient;
-use crate::printer::ZplPrinter;
-use crate::printer_status::*;
-use crate::zpl::{commands_to_zpl, parse_graphic_field_from_zpl, FieldOrientation, FontOrientation, ZplCommand};
+use zebras::{
+    labelary::LabelaryClient,
+    printer::ZplPrinter,
+    printer_status::*,
+    zpl::{commands_to_zpl, parse_graphic_field_from_zpl, FieldOrientation, FontOrientation, ZplCommand},
+};
 
 pub struct Zebras {
     zpl_commands: Vec<ZplCommand>,
@@ -14,13 +15,11 @@ pub struct Zebras {
     is_loading: bool,
     needs_initial_render: bool,
     pending_response: Arc<Mutex<Option<Result<Vec<u8>, String>>>>,
-    pending_scan_result: Arc<Mutex<Option<Vec<ZplPrinter>>>>,
     show_raw_text: bool,
     raw_zpl_mode: bool,
     raw_zpl_input: String,
     printers: Vec<ZplPrinter>,
     selected_printer: Option<usize>,
-    is_scanning: bool,
     print_status: Option<String>,
     manual_ip: String,
     image_load_status: Option<String>,
@@ -32,7 +31,6 @@ pub struct Zebras {
     parsed_status: Option<PrinterStatus>,
     printer_info: PrinterInfo,
     last_query_type: Option<String>,
-    cutting_enabled: bool,
     show_query_window: bool,
 }
 
@@ -80,13 +78,11 @@ impl Default for Zebras {
             is_loading: false,
             needs_initial_render: true,
             pending_response: Arc::new(Mutex::new(None)),
-            pending_scan_result: Arc::new(Mutex::new(None)),
             show_raw_text: false,
             raw_zpl_mode: false,
             raw_zpl_input: String::new(),
             printers: Vec::new(),
             selected_printer: None,
-            is_scanning: false,
             print_status: None,
             manual_ip: "10.73.27.7".to_string(),
             image_load_status: None,
@@ -98,7 +94,6 @@ impl Default for Zebras {
             parsed_status: None,
             printer_info: PrinterInfo::default(),
             last_query_type: None,
-            cutting_enabled: false,
             show_query_window: false,
         }
     }
@@ -111,35 +106,6 @@ impl Zebras {
         } else {
             commands_to_zpl(&self.zpl_commands)
         }
-    }
-
-    fn toggle_cutting(&mut self, enabled: bool) {
-        if enabled {
-            let has_media_mode = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::MediaModeDelayed));
-            let has_cut_now = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::CutNow));
-            let has_tear_off = self.zpl_commands.iter().any(|cmd| matches!(cmd, ZplCommand::MediaModeTearOff));
-
-            if !has_media_mode {
-                if let Some(start_idx) = self.zpl_commands.iter().position(|cmd| matches!(cmd, ZplCommand::StartFormat)) {
-                    self.zpl_commands.insert(start_idx + 1, ZplCommand::MediaModeDelayed);
-                }
-            }
-
-            if !has_cut_now {
-                if let Some(end_idx) = self.zpl_commands.iter().position(|cmd| matches!(cmd, ZplCommand::EndFormat)) {
-                    self.zpl_commands.insert(end_idx, ZplCommand::CutNow);
-                }
-            }
-
-            if !has_tear_off {
-                if let Some(end_idx) = self.zpl_commands.iter().position(|cmd| matches!(cmd, ZplCommand::EndFormat)) {
-                    self.zpl_commands.insert(end_idx, ZplCommand::MediaModeTearOff);
-                }
-            }
-        } else {
-            self.zpl_commands.retain(|cmd| !matches!(cmd, ZplCommand::MediaModeDelayed | ZplCommand::CutNow | ZplCommand::MediaModeTearOff));
-        }
-        self.is_dirty = true;
     }
 
     fn get_presets() -> Vec<(&'static str, Vec<ZplCommand>)> {
@@ -390,6 +356,57 @@ impl Zebras {
                     ZplCommand::EndFormat,
                 ],
             ),
+            (
+                "Download & Reuse Graphic",
+                vec![
+                    ZplCommand::DownloadGraphic {
+                        name: "LOGO".to_string(),
+                        width: 32,
+                        height: 32,
+                        data: "FFFFFFFFFFFFFFFFC0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003FFFFFFFFFFFFFFFF".to_string(),
+                    },
+                    ZplCommand::StartFormat,
+                    ZplCommand::FieldOrigin { x: 50, y: 50 },
+                    ZplCommand::Font {
+                        orientation: FontOrientation::Normal,
+                        height: 30,
+                        width: 30,
+                    },
+                    ZplCommand::FieldData {
+                        data: "Stored Graphics Demo".to_string(),
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::FieldOrigin { x: 50, y: 100 },
+                    ZplCommand::RecallGraphic {
+                        name: "LOGO".to_string(),
+                        magnification_x: 1,
+                        magnification_y: 1,
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::FieldOrigin { x: 150, y: 100 },
+                    ZplCommand::RecallGraphic {
+                        name: "LOGO".to_string(),
+                        magnification_x: 2,
+                        magnification_y: 2,
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::FieldOrigin { x: 50, y: 200 },
+                    ZplCommand::RecallGraphic {
+                        name: "LOGO".to_string(),
+                        magnification_x: 1,
+                        magnification_y: 1,
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::FieldOrigin { x: 150, y: 200 },
+                    ZplCommand::RecallGraphic {
+                        name: "LOGO".to_string(),
+                        magnification_x: 1,
+                        magnification_y: 1,
+                    },
+                    ZplCommand::FieldSeparator,
+                    ZplCommand::EndFormat,
+                ],
+            ),
         ]
     }
 
@@ -401,42 +418,82 @@ impl Zebras {
         }
     }
 
-    fn scan_for_printers(&mut self) {
-        self.is_scanning = true;
-        self.print_status = Some("Scanning for printers...".to_string());
-
+    fn save_template(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use std::thread;
-            let result = self.pending_scan_result.clone();
-
-            thread::spawn(move || {
-                let printers = crate::printer::scan_for_printers();
-                if let Ok(mut guard) = result.lock() {
-                    *guard = Some(printers);
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("JSON Template", &["json"])
+                .set_file_name("template.json")
+                .save_file()
+            {
+                match serde_json::to_string_pretty(&self.zpl_commands) {
+                    Ok(json) => {
+                        match std::fs::write(&path, json) {
+                            Ok(_) => {
+                                self.print_status = Some(format!("Template saved to {:?}", path.file_name()));
+                            }
+                            Err(error) => {
+                                self.print_status = Some(format!("Failed to save: {}", error));
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        self.print_status = Some(format!("Failed to serialize: {}", error));
+                    }
                 }
-            });
+            }
         }
 
         #[cfg(target_arch = "wasm32")]
         {
-            self.print_status = Some("Printer scanning not available in WASM".to_string());
-            self.is_scanning = false;
+            self.print_status = Some("Template save not available in WASM".to_string());
         }
     }
+
+    fn load_template(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("JSON Template", &["json"])
+                .pick_file()
+            {
+                match std::fs::read_to_string(&path) {
+                    Ok(json) => {
+                        match serde_json::from_str::<Vec<ZplCommand>>(&json) {
+                            Ok(commands) => {
+                                self.zpl_commands = commands;
+                                self.is_dirty = true;
+                                self.print_status = Some(format!("Template loaded from {:?}", path.file_name()));
+                            }
+                            Err(error) => {
+                                self.print_status = Some(format!("Failed to parse template: {}", error));
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        self.print_status = Some(format!("Failed to read file: {}", error));
+                    }
+                }
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.print_status = Some("Template load not available in WASM".to_string());
+        }
+    }
+
 
     fn send_to_printer(&mut self) {
         if let Some(idx) = self.selected_printer {
             if let Some(printer) = self.printers.get(idx) {
                 let mut zpl = String::new();
 
-                if !self.cutting_enabled {
-                    zpl.push_str("^XA^MMT^XZ\n");
-                }
+                zpl.push_str("^XA^MMT^XZ\n");
 
                 zpl.push_str(&self.get_zpl_text());
 
-                match crate::printer::send_to_printer(printer, &zpl) {
+                match zebras::printer::send_to_printer(printer, &zpl) {
                     Ok(_) => {
                         self.print_status = Some(format!("Sent to {}", printer.name));
                     }
@@ -481,21 +538,25 @@ impl Zebras {
         }
     }
 
-    fn query_printer(&mut self, query_type: &str, ui_context: &egui::Context) {
+    fn query_printer(&mut self, query_type: &str, ctx: &egui::Context) {
         if let Some(idx) = self.selected_printer {
             if let Some(printer) = self.printers.get(idx).cloned() {
                 self.is_querying = true;
                 self.query_response = Some("Querying printer...".to_string());
                 self.last_query_type = Some(query_type.to_string());
 
-                let query = format!("~HQ{}\r\n", query_type);
-                let ctx = ui_context.clone();
+                let query = if query_type == "HM" {
+                    format!("~{}\r\n", query_type)
+                } else {
+                    format!("~HQ{}\r\n", query_type)
+                };
+                let ctx = ctx.clone();
                 let pending_result = Arc::clone(&self.pending_query_result);
 
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     std::thread::spawn(move || {
-                        let response = crate::printer::query_printer(&printer, &query);
+                        let response = zebras::printer::query_printer(&printer, &query);
                         if let Ok(mut guard) = pending_result.lock() {
                             *guard = Some(response);
                         }
@@ -514,14 +575,14 @@ impl Zebras {
         }
     }
 
-    fn query_all(&mut self, ui_context: &egui::Context) {
+    fn query_all(&mut self, ctx: &egui::Context) {
         if let Some(idx) = self.selected_printer {
             if let Some(printer) = self.printers.get(idx).cloned() {
                 self.is_querying = true;
                 self.query_response = Some("Starting comprehensive query...\n\n".to_string());
                 self.last_query_type = Some("ALL".to_string());
 
-                let ctx = ui_context.clone();
+                let ctx = ctx.clone();
                 let pending_result = Arc::clone(&self.pending_query_result);
 
                 #[cfg(not(target_arch = "wasm32"))]
@@ -550,6 +611,7 @@ impl Zebras {
                             ("SUPPLIES STATUS (ST)", "~HQST\r\n"),
                             ("DARKNESS SETTINGS (DA)", "~HQDA\r\n"),
                             ("PLUG AND PLAY (PP)", "~HQPP\r\n"),
+                            ("HOST RAM STATUS (HM)", "~HM\r\n"),
                         ];
 
                         let total = queries.len();
@@ -557,10 +619,29 @@ impl Zebras {
                             let progress = format!("[{}/{}] ", index + 1, total);
                             let mut section = format!("=== {} ===\n", name);
 
-                            match crate::printer::query_printer(&printer, query) {
+                            match zebras::printer::query_printer(&printer, query) {
                                 Ok(response) => {
                                     if response.trim().is_empty() {
                                         section.push_str("(No response or not supported)\n");
+                                    } else if name == &"HOST RAM STATUS (HM)" {
+                                        if let Some(memory) = zebras::printer_status::PrinterInfo::parse_memory_status(&response) {
+                                            let used_kb = memory.max_available_kb.saturating_sub(memory.current_available_kb);
+                                            let usage_percent = if memory.max_available_kb > 0 {
+                                                (used_kb as f32 / memory.max_available_kb as f32 * 100.0) as u32
+                                            } else {
+                                                0
+                                            };
+                                            section.push_str(&format!(
+                                                "Total RAM Installed:       {} KB\nMaximum Available:         {} KB\nCurrently Available:       {} KB\nMemory Used:               {} KB\nMemory Usage:              {}%\n",
+                                                memory.total_ram_kb,
+                                                memory.max_available_kb,
+                                                memory.current_available_kb,
+                                                used_kb,
+                                                usage_percent
+                                            ));
+                                        } else {
+                                            section.push_str(&response);
+                                        }
                                     } else {
                                         section.push_str(&response);
                                     }
@@ -597,13 +678,13 @@ impl Zebras {
         }
     }
 
-    fn render_zpl(&mut self, ui_context: &egui::Context) {
+    fn render_zpl(&mut self, ctx: &egui::Context) {
         self.error_message = None;
         self.is_loading = true;
 
         let zpl = self.get_zpl_text();
 
-        let ctx = ui_context.clone();
+        let ctx = ctx.clone();
         let pending_response = Arc::clone(&self.pending_response);
         let client = LabelaryClient::default();
 
@@ -677,54 +758,59 @@ impl Zebras {
                 color,
                 rounding,
             } => {
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("W:");
-                        if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
-                            self.is_dirty = true;
-                        }
-                        ui.label("H:");
-                        if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
-                            self.is_dirty = true;
-                        }
-                        ui.label("T:");
-                        if ui.add(egui::DragValue::new(thickness).speed(1)).lost_focus() {
-                            self.is_dirty = true;
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Color:");
-                        let mut color_selection = match color {
-                            Some('B') => 0,
-                            Some('W') => 1,
-                            _ => 2,
-                        };
-                        let prev_selection = color_selection;
-                        ui.radio_value(&mut color_selection, 0, "Black");
-                        ui.radio_value(&mut color_selection, 1, "White");
-                        ui.radio_value(&mut color_selection, 2, "Default");
-                        if color_selection != prev_selection {
-                            *color = match color_selection {
-                                0 => Some('B'),
-                                1 => Some('W'),
-                                _ => None,
+                ui.push_id(idx, |ui| {
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("W:");
+                            if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
+                                self.is_dirty = true;
+                            }
+                            ui.label("H:");
+                            if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
+                                self.is_dirty = true;
+                            }
+                            ui.label("T:");
+                            if ui.add(egui::DragValue::new(thickness).speed(1)).lost_focus() {
+                                self.is_dirty = true;
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Color:");
+                            let mut color_selection = match color {
+                                Some('B') => 0,
+                                Some('W') => 1,
+                                _ => 2,
                             };
-                            self.is_dirty = true;
-                        }
+                            let prev_selection = color_selection;
+                            ui.radio_value(&mut color_selection, 0, "Black");
+                            ui.radio_value(&mut color_selection, 1, "White");
+                            ui.radio_value(&mut color_selection, 2, "Default");
+                            if color_selection != prev_selection {
+                                *color = match color_selection {
+                                    0 => Some('B'),
+                                    1 => Some('W'),
+                                    _ => None,
+                                };
+                                self.is_dirty = true;
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Rounding:");
+                            let mut rounding_value = rounding.unwrap_or(0);
+                            let response = ui.add(egui::Slider::new(&mut rounding_value, 0..=8));
+                            if response.changed() {
+                                *rounding = if rounding_value > 0 {
+                                    Some(rounding_value)
+                                } else {
+                                    None
+                                };
+                            }
+                            if response.lost_focus() {
+                                self.is_dirty = true;
+                            }
+                        });
+                        ui.label(egui::RichText::new("Tip: For horizontal line, set height=1-5. For vertical line, set width=1-5").small().color(egui::Color32::GRAY));
                     });
-                    ui.horizontal(|ui| {
-                        ui.label("Rounding:");
-                        let mut rounding_value = rounding.unwrap_or(0);
-                        if ui.add(egui::Slider::new(&mut rounding_value, 0..=8)).changed() {
-                            *rounding = if rounding_value > 0 {
-                                Some(rounding_value)
-                            } else {
-                                None
-                            };
-                            self.is_dirty = true;
-                        }
-                    });
-                    ui.label(egui::RichText::new("Tip: For horizontal line, set height=1-5. For vertical line, set width=1-5").small().color(egui::Color32::GRAY));
                 });
             }
             ZplCommand::GraphicField { width, height, data } => {
@@ -888,7 +974,7 @@ impl Zebras {
                                             *height,
                                             image::imageops::FilterType::Lanczos3,
                                         );
-                                        *data = crate::zpl::image_to_zpl_hex(&resized_image, self.graphic_threshold);
+                                        *data = zebras::zpl::image_to_zpl_hex(&resized_image, self.graphic_threshold);
                                         self.image_load_status = Some(format!(
                                             "Image loaded! {} chars - rendering...",
                                             data.len()
@@ -914,13 +1000,227 @@ impl Zebras {
                     }
                 });
             }
+            ZplCommand::DownloadGraphic { name, width, height, data } => {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("Stores graphic in printer memory").small().color(egui::Color32::GRAY));
+                    ui.horizontal(|ui| {
+                        ui.label("Name:");
+                        if ui.text_edit_singleline(name).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("W:");
+                        if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                        ui.label("H:");
+                        if ui.add(egui::DragValue::new(height).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Data (hex):");
+                        if ui.text_edit_singleline(data).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.label(format!("Data length: {} chars", data.len()));
+                    ui.separator();
+                    ui.label("Load from image:");
+                    ui.horizontal(|ui| {
+                        if ui.button("Select Image (Labelary API)").clicked() {
+                            self.image_load_status = Some("Opening file dialog...".to_string());
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif"])
+                                .pick_file()
+                            {
+                                self.image_load_status = Some(format!("Loading {:?}...", path.file_name()));
+                                #[cfg(not(target_arch = "wasm32"))]
+                                {
+                                    match std::fs::read(&path) {
+                                        Ok(file_bytes) => {
+                                            if file_bytes.len() > 200_000 {
+                                                match image::open(&path) {
+                                                    Ok(loaded_image) => {
+                                                        self.image_load_status = Some(format!(
+                                                            "Resizing {}x{} image...",
+                                                            loaded_image.width(),
+                                                            loaded_image.height()
+                                                        ));
+                                                        let max_dimension = 1000;
+                                                        let scale = (max_dimension as f32 / loaded_image.width().max(loaded_image.height()) as f32).min(1.0);
+                                                        let new_width = (loaded_image.width() as f32 * scale) as u32;
+                                                        let new_height = (loaded_image.height() as f32 * scale) as u32;
+                                                        let resized_image = loaded_image.resize(new_width, new_height, image::imageops::FilterType::Lanczos3);
+
+                                                        self.image_load_status = Some("Encoding as PNG...".to_string());
+                                                        let mut png_bytes = Vec::new();
+                                                        let encode_result = {
+                                                            use image::codecs::png::PngEncoder;
+                                                            use image::ImageEncoder;
+                                                            let rgba = resized_image.to_rgba8();
+                                                            let encoder = PngEncoder::new(&mut png_bytes);
+                                                            encoder.write_image(
+                                                                rgba.as_raw(),
+                                                                resized_image.width(),
+                                                                resized_image.height(),
+                                                                image::ExtendedColorType::Rgba8
+                                                            )
+                                                        };
+
+                                                        if let Err(e) = encode_result {
+                                                            self.image_load_status = Some(format!("Encode failed: {}", e));
+                                                        } else if png_bytes.is_empty() {
+                                                            self.image_load_status = Some("Empty PNG data".to_string());
+                                                        } else {
+                                                            self.image_load_status = Some(format!("Sending {}KB...", png_bytes.len() / 1024));
+                                                            let client = LabelaryClient::default();
+                                                            match client.convert_image_to_zpl_sync(png_bytes) {
+                                                Ok(zpl_response) => {
+                                                    self.image_load_status = Some("Parsing ZPL response...".to_string());
+                                                    if let Some((parsed_width, parsed_height, hex_data)) = parse_graphic_field_from_zpl(&zpl_response) {
+                                                        *width = parsed_width;
+                                                        *height = parsed_height;
+                                                        *data = hex_data;
+                                                        self.image_load_status = Some(format!(
+                                                            "Image loaded! {}x{}, {} chars - rendering...",
+                                                            width, height, data.len()
+                                                        ));
+                                                        self.needs_render_after_image = true;
+                                                    } else {
+                                                        self.image_load_status = Some(format!(
+                                                            "Failed to parse ZPL response. Response: {}",
+                                                            &zpl_response[..zpl_response.len().min(200)]
+                                                        ));
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    self.image_load_status = Some(format!("API error: {}", e));
+                                                }
+                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        self.image_load_status = Some(format!("Failed to load image for resizing: {}", e));
+                                                    }
+                                                }
+                                            } else {
+                                                self.image_load_status = Some(format!("Sending {}KB directly...", file_bytes.len() / 1024));
+                                                let client = LabelaryClient::default();
+                                                match client.convert_image_to_zpl_sync(file_bytes) {
+                                                    Ok(zpl_response) => {
+                                                        self.image_load_status = Some("Parsing ZPL response...".to_string());
+                                                        if let Some((parsed_width, parsed_height, hex_data)) = parse_graphic_field_from_zpl(&zpl_response) {
+                                                            *width = parsed_width;
+                                                            *height = parsed_height;
+                                                            *data = hex_data;
+                                                            self.image_load_status = Some(format!(
+                                                                "Image loaded! {}x{}, {} chars - rendering...",
+                                                                width, height, data.len()
+                                                            ));
+                                                            self.needs_render_after_image = true;
+                                                        } else {
+                                                            self.image_load_status = Some(format!(
+                                                                "Failed to parse ZPL response. Response: {}",
+                                                                &zpl_response[..zpl_response.len().min(200)]
+                                                            ));
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        self.image_load_status = Some(format!("API error: {}", e));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            self.image_load_status = Some(format!("Failed to read file: {}", e));
+                                        }
+                                    }
+                                }
+                                #[cfg(target_arch = "wasm32")]
+                                {
+                                    self.image_load_status = Some("Image upload not available in WASM".to_string());
+                                }
+                            } else {
+                                self.image_load_status = None;
+                            }
+                        }
+                        if ui.button("Select Image (Local)").clicked() {
+                            self.image_load_status = Some("Opening file dialog...".to_string());
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Image", &["png", "jpg", "jpeg", "bmp", "gif"])
+                                .pick_file()
+                            {
+                                self.image_load_status = Some(format!("Loading {:?}...", path.file_name()));
+                                match image::open(&path) {
+                                    Ok(loaded_image) => {
+                                        self.image_load_status = Some(format!(
+                                            "Resizing {}x{} to {}x{}...",
+                                            loaded_image.width(),
+                                            loaded_image.height(),
+                                            *width,
+                                            *height
+                                        ));
+                                        let resized_image = loaded_image.resize(
+                                            *width,
+                                            *height,
+                                            image::imageops::FilterType::Lanczos3,
+                                        );
+                                        *data = zebras::zpl::image_to_zpl_hex(&resized_image, self.graphic_threshold);
+                                        self.image_load_status = Some(format!(
+                                            "Image loaded! {} chars - rendering...",
+                                            data.len()
+                                        ));
+                                        self.needs_render_after_image = true;
+                                    }
+                                    Err(e) => {
+                                        self.image_load_status = Some(format!("Error loading image: {}", e));
+                                    }
+                                }
+                            } else {
+                                self.image_load_status = None;
+                            }
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Threshold (Local only):");
+                        ui.add(egui::Slider::new(&mut self.graphic_threshold, 0..=255));
+                    });
+                    ui.label(egui::RichText::new("(Lower = more black, Higher = more white)").small().color(egui::Color32::GRAY));
+                    if let Some(ref status) = self.image_load_status {
+                        ui.label(egui::RichText::new(status).color(egui::Color32::LIGHT_BLUE));
+                    }
+                });
+            }
+            ZplCommand::RecallGraphic { name, magnification_x, magnification_y } => {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("Note: Add Field Origin (^FO) before this. Graphic must be stored via ~DG first").small().color(egui::Color32::GRAY));
+                    ui.horizontal(|ui| {
+                        ui.label("Name:");
+                        if ui.text_edit_singleline(name).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Mag X:");
+                        if ui.add(egui::DragValue::new(magnification_x).speed(1).range(1..=10)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                        ui.label("Mag Y:");
+                        if ui.add(egui::DragValue::new(magnification_y).speed(1).range(1..=10)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                });
+            }
             _ => {
                 ui.label("(Complex command - not yet editable)");
             }
         }
     }
 
-    fn process_image_response(&mut self, image_data: Vec<u8>, ui_context: &egui::Context) {
+    fn process_image_response(&mut self, image_data: Vec<u8>, ctx: &egui::Context) {
         let image = image::load_from_memory(&image_data);
         match image {
             Ok(img) => {
@@ -929,7 +1229,7 @@ impl Zebras {
                 let pixels = rgba.as_flat_samples();
                 let color_image =
                     egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-                let texture = ui_context.load_texture(
+                let texture = ctx.load_texture(
                     "zpl_render",
                     color_image,
                     egui::TextureOptions::LINEAR,
@@ -945,16 +1245,8 @@ impl Zebras {
     }
 }
 
-impl State for Zebras {
-    fn title(&self) -> &str {
-        "Zebras - ZPL Simulator"
-    }
-
-    fn initialize(&mut self, world: &mut World) {
-        world.resources.user_interface.enabled = true;
-    }
-
-    fn ui(&mut self, _world: &mut World, ui_context: &egui::Context) {
+impl eframe::App for Zebras {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let pending_result = if let Ok(mut guard) = self.pending_response.try_lock() {
             guard.take()
         } else {
@@ -964,7 +1256,7 @@ impl State for Zebras {
         if let Some(response) = pending_result {
             match response {
                 Ok(image_data) => {
-                    self.process_image_response(image_data, ui_context);
+                    self.process_image_response(image_data, ctx);
                 }
                 Err(e) => {
                     self.error_message = Some(e);
@@ -973,34 +1265,6 @@ impl State for Zebras {
             }
         }
 
-        let pending_scan = if let Ok(mut guard) = self.pending_scan_result.try_lock() {
-            guard.take()
-        } else {
-            None
-        };
-
-        if let Some(mut scanned_printers) = pending_scan {
-            self.is_scanning = false;
-            if scanned_printers.is_empty() {
-                self.print_status = Some("No printers found".to_string());
-            } else {
-                let mut added_count = 0;
-                for scanned in scanned_printers.drain(..) {
-                    let already_exists = self.printers.iter().any(|existing| {
-                        existing.ip == scanned.ip && !scanned.ip.is_empty()
-                    });
-                    if !already_exists {
-                        self.printers.push(scanned);
-                        added_count += 1;
-                    }
-                }
-                if added_count > 0 {
-                    self.print_status = Some(format!("Found {} new printer(s)", added_count));
-                } else {
-                    self.print_status = Some("No new printers found".to_string());
-                }
-            }
-        }
 
         let pending_query = if let Ok(mut guard) = self.pending_query_result.try_lock() {
             if let Some(ref result) = *guard {
@@ -1011,7 +1275,10 @@ impl State for Zebras {
                             if is_complete {
                                 guard.take()
                             } else {
-                                self.query_response = Some(response.replace("___COMPLETE___", ""));
+                                let new_response = response.replace("___COMPLETE___", "");
+                                if self.query_response.as_ref() != Some(&new_response) {
+                                    self.query_response = Some(new_response);
+                                }
                                 None
                             }
                         } else {
@@ -1109,6 +1376,29 @@ impl State for Zebras {
                                 self.query_response = Some(cleaned_response.clone());
                                 self.parsed_status = None;
                             }
+                            "HM" => {
+                                if let Some(memory) = PrinterInfo::parse_memory_status(&cleaned_response) {
+                                    self.printer_info.memory_status = Some(memory);
+                                    let used_kb = memory.max_available_kb.saturating_sub(memory.current_available_kb);
+                                    let usage_percent = if memory.max_available_kb > 0 {
+                                        (used_kb as f32 / memory.max_available_kb as f32 * 100.0) as u32
+                                    } else {
+                                        0
+                                    };
+                                    let formatted = format!(
+                                        "HOST RAM STATUS\n\nTotal RAM Installed:       {} KB\nMaximum Available:         {} KB\nCurrently Available:       {} KB\nMemory Used:               {} KB\nMemory Usage:              {}%",
+                                        memory.total_ram_kb,
+                                        memory.max_available_kb,
+                                        memory.current_available_kb,
+                                        used_kb,
+                                        usage_percent
+                                    );
+                                    self.query_response = Some(formatted);
+                                } else {
+                                    self.query_response = Some(format!("Failed to parse memory status\n\nRaw response:\n{}", cleaned_response));
+                                }
+                                self.parsed_status = None;
+                            }
                             "ALL" => {
                                 let sections: Vec<&str> = cleaned_response.split("===").collect();
                                 for section in sections {
@@ -1137,6 +1427,10 @@ impl State for Zebras {
                                         let lines: Vec<&str> = section.lines().skip(1).collect();
                                         let data = lines.join("\n");
                                         self.printer_info.plug_and_play = PrinterInfo::parse_plug_and_play(&data);
+                                    } else if section.contains("HOST RAM STATUS") {
+                                        let lines: Vec<&str> = section.lines().skip(1).collect();
+                                        let data = lines.join("\n");
+                                        self.printer_info.memory_status = PrinterInfo::parse_memory_status(&data);
                                     }
                                 }
                                 self.query_response = Some(cleaned_response.clone());
@@ -1160,10 +1454,10 @@ impl State for Zebras {
 
         if self.needs_initial_render {
             self.needs_initial_render = false;
-            self.render_zpl(ui_context);
+            self.render_zpl(ctx);
         }
 
-        egui::TopBottomPanel::top("top_panel").show(ui_context, |ui| {
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("ZPL Simulator");
                 ui.separator();
@@ -1173,30 +1467,39 @@ impl State for Zebras {
                     .selected_text("Load...")
                     .show_ui(ui, |ui| {
                         let mut clicked_preset = None;
-                        for (name, _) in Self::get_presets() {
-                            if ui.selectable_label(false, name).clicked() {
-                                clicked_preset = Some(name);
-                            }
-                        }
+                        egui::ScrollArea::vertical()
+                            .max_height(300.0)
+                            .show(ui, |ui| {
+                                for (name, _) in Self::get_presets() {
+                                    if ui.selectable_label(false, name).clicked() {
+                                        clicked_preset = Some(name);
+                                    }
+                                }
+                            });
                         clicked_preset
                     });
                 
                 if let Some(inner) = preset_response.inner {
                     if let Some(preset_name) = inner {
                         self.load_preset(preset_name);
-                        self.render_zpl(ui_context);
+                        self.render_zpl(ctx);
                         self.is_dirty = false;
                     }
                 }
 
                 ui.separator();
 
-                if !self.raw_zpl_mode {
-                    if ui.checkbox(&mut self.cutting_enabled, "Enable Cutting").changed() {
-                        self.toggle_cutting(self.cutting_enabled);
-                    }
-                    ui.separator();
+                if ui.button("Save Template").clicked() {
+                    self.save_template();
                 }
+
+                if ui.button("Load Template").clicked() {
+                    self.load_template();
+                    self.render_zpl(ctx);
+                    self.is_dirty = false;
+                }
+
+                ui.separator();
 
                 let button_enabled = self.is_dirty && !self.is_loading;
                 let button_text = if self.is_loading {
@@ -1209,20 +1512,10 @@ impl State for Zebras {
                 if ui.add_enabled(button_enabled, button).clicked() {
                     let zpl = self.get_zpl_text();
                     println!("Rendering ZPL:\n{}\n", zpl);
-                    self.render_zpl(ui_context);
+                    self.render_zpl(ctx);
                 }
 
                 if self.is_loading {
-                    ui.spinner();
-                }
-
-                ui.separator();
-
-                if ui.add_enabled(!self.is_scanning, egui::Button::new("Scan for Printers")).clicked() {
-                    self.scan_for_printers();
-                }
-
-                if self.is_scanning {
                     ui.spinner();
                 }
 
@@ -1249,11 +1542,15 @@ impl State for Zebras {
                     egui::ComboBox::from_id_salt(ui.next_auto_id())
                         .selected_text(selected_text)
                         .show_ui(ui, |ui| {
-                            for (idx, printer) in self.printers.iter().enumerate() {
-                                if ui.selectable_label(Some(idx) == self.selected_printer, &printer.name).clicked() {
-                                    self.selected_printer = Some(idx);
-                                }
-                            }
+                            egui::ScrollArea::vertical()
+                                .max_height(300.0)
+                                .show(ui, |ui| {
+                                    for (idx, printer) in self.printers.iter().enumerate() {
+                                        if ui.selectable_label(Some(idx) == self.selected_printer, &printer.name).clicked() {
+                                            self.selected_printer = Some(idx);
+                                        }
+                                    }
+                                });
                         });
 
                     if ui.add_enabled(self.selected_printer.is_some(), egui::Button::new("Send to Printer")).clicked() {
@@ -1277,7 +1574,7 @@ impl State for Zebras {
             });
         });
 
-        egui::CentralPanel::default().show(ui_context, |ui| {
+        egui::CentralPanel::default().show(ctx, |ui| {
             ui.columns(2, |columns| {
                 columns[0].vertical(|ui| {
                         ui.horizontal(|ui| {
@@ -1299,8 +1596,10 @@ impl State for Zebras {
 
                         if self.raw_zpl_mode {
                             ui.label("Enter raw ZPL code below:");
+                            let available_height = ui.available_height() - 50.0;
                             egui::ScrollArea::vertical()
                                 .auto_shrink([false, false])
+                                .max_height(available_height)
                                 .show(ui, |ui| {
                                     if ui.add(
                                         egui::TextEdit::multiline(&mut self.raw_zpl_input)
@@ -1316,19 +1615,38 @@ impl State for Zebras {
                                     self.raw_zpl_input.clear();
                                     self.is_dirty = true;
                                 }
+                                if ui.button("Copy to Clipboard").clicked() {
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    {
+                                        use arboard::Clipboard;
+                                        if let Ok(mut clipboard) = Clipboard::new() {
+                                            if let Err(_) = clipboard.set_text(&self.raw_zpl_input) {
+                                                self.print_status = Some("Failed to copy to clipboard".to_string());
+                                            }
+                                        }
+                                    }
+                                    #[cfg(target_arch = "wasm32")]
+                                    {
+                                        ui.ctx().copy_text(self.raw_zpl_input.clone());
+                                    }
+                                }
                                 let example_response = egui::ComboBox::from_id_salt(ui.next_auto_id())
                                     .selected_text("Load Example...")
                                     .show_ui(ui, |ui| {
                                         let mut selected = None;
-                                        if ui.selectable_label(false, "Hello World").clicked() {
-                                            selected = Some("^XA\n^FO50,50\n^A0N,50,50\n^FDHello World^FS\n^FO50,150\n^GB300,2,2^FS\n^FO50,200\n^A0N,30,30\n^FDRaw ZPL Entry^FS\n^XZ");
-                                        }
-                                        if ui.selectable_label(false, "Graphic Test (32x32)").clicked() {
-                                            selected = Some("^XA\n^FO50,50^A0N,30,30^FDGraphic Below:^FS\n^FO50,100^GFA,128,128,4,FFFFFFFFFFFFFFFFC0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003FFFFFFFFFFFFFFFF^FS\n^FO50,200^A0N,30,30^FD32x32 Box^FS\n^XZ");
-                                        }
-                                        if ui.selectable_label(false, "Large Graphic (64x64)").clicked() {
-                                            selected = Some("^XA\n^FO100,100\n^GFA,512,512,8,FFFFFFFFFFFFFFFF80000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001FFFFFFFFFFFFFFFF^FS\n^XZ");
-                                        }
+                                        egui::ScrollArea::vertical()
+                                            .max_height(200.0)
+                                            .show(ui, |ui| {
+                                                if ui.selectable_label(false, "Hello World").clicked() {
+                                                    selected = Some("^XA\n^FO50,50\n^A0N,50,50\n^FDHello World^FS\n^FO50,150\n^GB300,2,2^FS\n^FO50,200\n^A0N,30,30\n^FDRaw ZPL Entry^FS\n^XZ");
+                                                }
+                                                if ui.selectable_label(false, "Graphic Test (32x32)").clicked() {
+                                                    selected = Some("^XA\n^FO50,50^A0N,30,30^FDGraphic Below:^FS\n^FO50,100^GFA,128,128,4,FFFFFFFFFFFFFFFFC0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003FFFFFFFFFFFFFFFF^FS\n^FO50,200^A0N,30,30^FD32x32 Box^FS\n^XZ");
+                                                }
+                                                if ui.selectable_label(false, "Large Graphic (64x64)").clicked() {
+                                                    selected = Some("^XA\n^FO100,100\n^GFA,512,512,8,FFFFFFFFFFFFFFFF80000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001800000000000000180000000000000018000000000000001FFFFFFFFFFFFFFFF^FS\n^XZ");
+                                                }
+                                            });
                                         selected
                                     });
                                 if let Some(inner) = example_response.inner {
@@ -1357,8 +1675,29 @@ impl State for Zebras {
                                 }
                             });
                         } else if self.show_raw_text {
+                            ui.horizontal(|ui| {
+                                ui.label("Generated ZPL:");
+                                if ui.button("Copy to Clipboard").clicked() {
+                                    let zpl_text = self.get_zpl_text();
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    {
+                                        use arboard::Clipboard;
+                                        if let Ok(mut clipboard) = Clipboard::new() {
+                                            if let Err(_) = clipboard.set_text(&zpl_text) {
+                                                self.print_status = Some("Failed to copy to clipboard".to_string());
+                                            }
+                                        }
+                                    }
+                                    #[cfg(target_arch = "wasm32")]
+                                    {
+                                        ui.ctx().copy_text(zpl_text);
+                                    }
+                                }
+                            });
+                            let available_height = ui.available_height();
                             egui::ScrollArea::vertical()
                                 .auto_shrink([false, false])
+                                .max_height(available_height)
                                 .show(ui, |ui| {
                                     let zpl_text = self.get_zpl_text();
                                     ui.add(
@@ -1376,13 +1715,17 @@ impl State for Zebras {
                                     .selected_text("Select...")
                                     .show_ui(ui, |ui| {
                                         let mut selected = None;
-                                        for (idx, (name, _)) in
-                                            ZplCommand::all_command_types().iter().enumerate()
-                                        {
-                                            if ui.selectable_label(false, *name).clicked() {
-                                                selected = Some(idx);
-                                            }
-                                        }
+                                        egui::ScrollArea::vertical()
+                                            .max_height(400.0)
+                                            .show(ui, |ui| {
+                                                for (idx, (name, _)) in
+                                                    ZplCommand::all_command_types().iter().enumerate()
+                                                {
+                                                    if ui.selectable_label(false, *name).clicked() {
+                                                        selected = Some(idx);
+                                                    }
+                                                }
+                                            });
                                         selected
                                     });
 
@@ -1415,11 +1758,15 @@ impl State for Zebras {
                                                 );
 
                                                 ui.vertical(|ui| {
-                                                    ui.label(egui::RichText::new(
-                                                        self.zpl_commands[idx].command_name(),
+                                                    egui::CollapsingHeader::new(
+                                                        egui::RichText::new(
+                                                            self.zpl_commands[idx].command_name()
+                                                        ).strong()
                                                     )
-                                                    .strong());
-                                                    self.render_command_editor(ui, idx);
+                                                    .default_open(false)
+                                                    .show(ui, |ui| {
+                                                        self.render_command_editor(ui, idx);
+                                                    });
                                                 });
 
                                                 ui.vertical(|ui| {
@@ -1454,7 +1801,7 @@ impl State for Zebras {
 
                                     if self.needs_render_after_image {
                                         self.needs_render_after_image = false;
-                                        self.render_zpl(ui_context);
+                                        self.render_zpl(ctx);
                                     }
                                 });
                         }
@@ -1507,7 +1854,7 @@ impl State for Zebras {
                 .default_width(500.0)
                 .default_height(400.0)
                 .open(&mut show_window)
-                .show(ui_context, |ui| {
+                .show(ctx, |ui| {
                     ui.heading("Query Printer");
                     ui.add_space(10.0);
 
@@ -1522,72 +1869,79 @@ impl State for Zebras {
                         egui::ComboBox::from_id_salt(ui.next_auto_id())
                             .selected_text("Select...")
                             .show_ui(ui, |ui| {
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Printer Status (ES)")).clicked() {
-                                    self.query_printer("ES", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Host Status (HS)")).clicked() {
-                                    self.query_printer("HS", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Host Identification (HI)")).clicked() {
-                                    self.query_printer("HI", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Serial Number (SN)")).clicked() {
-                                    self.query_printer("SN", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Hardware Address (HA)")).clicked() {
-                                    self.query_printer("HA", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Odometer (OD)")).clicked() {
-                                    self.query_printer("OD", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Printhead Life (PH)")).clicked() {
-                                    self.query_printer("PH", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Print Configuration (PR)")).clicked() {
-                                    self.query_printer("PR", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Config Status (CM)")).clicked() {
-                                    self.query_printer("CM", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Battery Capacity (BC)")).clicked() {
-                                    self.query_printer("BC", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("USB Device ID (UI)")).clicked() {
-                                    self.query_printer("UI", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Label Dimensions (LD)")).clicked() {
-                                    self.query_printer("LD", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Label Count (LC)")).clicked() {
-                                    self.query_printer("LC", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("File System Info (FS)")).clicked() {
-                                    self.query_printer("FS", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Network Router (NR)")).clicked() {
-                                    self.query_printer("NR", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Maintenance Alert (MA)")).clicked() {
-                                    self.query_printer("MA", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Sensor/Media Status (SM)")).clicked() {
-                                    self.query_printer("SM", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Alerts (AL)")).clicked() {
-                                    self.query_printer("AL", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Firmware Version (FW)")).clicked() {
-                                    self.query_printer("FW", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Supplies Status (ST)")).clicked() {
-                                    self.query_printer("ST", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Darkness Settings (DA)")).clicked() {
-                                    self.query_printer("DA", ui.ctx());
-                                }
-                                if ui.add_enabled(query_button_enabled, egui::Button::new("Plug and Play (PP)")).clicked() {
-                                    self.query_printer("PP", ui.ctx());
-                                }
+                                egui::ScrollArea::vertical()
+                                    .max_height(400.0)
+                                    .show(ui, |ui| {
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Printer Status (ES)")).clicked() {
+                                            self.query_printer("ES", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Host Status (HS)")).clicked() {
+                                            self.query_printer("HS", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Host Identification (HI)")).clicked() {
+                                            self.query_printer("HI", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Serial Number (SN)")).clicked() {
+                                            self.query_printer("SN", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Hardware Address (HA)")).clicked() {
+                                            self.query_printer("HA", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Odometer (OD)")).clicked() {
+                                            self.query_printer("OD", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Printhead Life (PH)")).clicked() {
+                                            self.query_printer("PH", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Print Configuration (PR)")).clicked() {
+                                            self.query_printer("PR", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Config Status (CM)")).clicked() {
+                                            self.query_printer("CM", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Battery Capacity (BC)")).clicked() {
+                                            self.query_printer("BC", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("USB Device ID (UI)")).clicked() {
+                                            self.query_printer("UI", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Label Dimensions (LD)")).clicked() {
+                                            self.query_printer("LD", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Label Count (LC)")).clicked() {
+                                            self.query_printer("LC", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("File System Info (FS)")).clicked() {
+                                            self.query_printer("FS", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Network Router (NR)")).clicked() {
+                                            self.query_printer("NR", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Maintenance Alert (MA)")).clicked() {
+                                            self.query_printer("MA", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Sensor/Media Status (SM)")).clicked() {
+                                            self.query_printer("SM", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Alerts (AL)")).clicked() {
+                                            self.query_printer("AL", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Firmware Version (FW)")).clicked() {
+                                            self.query_printer("FW", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Supplies Status (ST)")).clicked() {
+                                            self.query_printer("ST", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Darkness Settings (DA)")).clicked() {
+                                            self.query_printer("DA", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Plug and Play (PP)")).clicked() {
+                                            self.query_printer("PP", ui.ctx());
+                                        }
+                                        if ui.add_enabled(query_button_enabled, egui::Button::new("Host RAM Status (HM)")).clicked() {
+                                            self.query_printer("HM", ui.ctx());
+                                        }
+                                    });
                             });
 
                         if self.is_querying {
@@ -1663,7 +2017,8 @@ impl State for Zebras {
                                 || self.printer_info.hardware_address.is_some()
                                 || self.printer_info.odometer.is_some()
                                 || self.printer_info.printhead_life.is_some()
-                                || self.printer_info.plug_and_play.is_some();
+                                || self.printer_info.plug_and_play.is_some()
+                                || self.printer_info.memory_status.is_some();
 
                             if has_printer_info {
                                 let mut clear_info = false;
@@ -1706,6 +2061,21 @@ impl State for Zebras {
                                 if let Some(ref pnp) = self.printer_info.plug_and_play {
                                     ui.label(egui::RichText::new("Plug and Play Info:").strong());
                                     ui.label(pnp);
+                                    ui.add_space(8.0);
+                                }
+
+                                if let Some(ref memory) = self.printer_info.memory_status {
+                                    ui.label(egui::RichText::new("Memory Status:").strong());
+                                    ui.label(format!("Total RAM: {} KB", memory.total_ram_kb));
+                                    ui.label(format!("Max Available: {} KB", memory.max_available_kb));
+                                    ui.label(format!("Currently Available: {} KB", memory.current_available_kb));
+                                    let used_kb = memory.max_available_kb.saturating_sub(memory.current_available_kb);
+                                    let usage_percent = if memory.max_available_kb > 0 {
+                                        (used_kb as f32 / memory.max_available_kb as f32 * 100.0) as u32
+                                    } else {
+                                        0
+                                    };
+                                    ui.label(format!("Memory Usage: {}%", usage_percent));
                                     ui.add_space(8.0);
                                 }
 
@@ -1766,13 +2136,5 @@ impl State for Zebras {
         }
     }
 
-    fn on_keyboard_input(&mut self, world: &mut World, key_code: KeyCode, key_state: KeyState) {
-        if matches!(
-            (key_code, key_state),
-            (KeyCode::KeyQ, KeyState::Pressed)
-        ) {
-            world.resources.window.should_exit = true;
-        }
-    }
 }
 

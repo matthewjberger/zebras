@@ -1,5 +1,5 @@
 #[cfg(not(target_arch = "wasm32"))]
-use std::net::{TcpStream, IpAddr};
+use std::net::TcpStream;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::{Write, Read};
 #[cfg(not(target_arch = "wasm32"))]
@@ -23,47 +23,6 @@ impl ZplPrinter {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-pub fn scan_for_printers() -> Vec<ZplPrinter> {
-    use std::net::SocketAddr;
-
-    let mut printers = Vec::new();
-
-    let local_ip = match local_ip_address::local_ip() {
-        Ok(ip) => ip,
-        Err(_) => return printers,
-    };
-
-    let base_ip = match local_ip {
-        IpAddr::V4(ipv4) => {
-            let octets = ipv4.octets();
-            format!("{}.{}.{}", octets[0], octets[1], octets[2])
-        }
-        _ => return printers,
-    };
-
-    for i in 1..255 {
-        let ip = format!("{}.{}", base_ip, i);
-        let addr = match format!("{}:9100", ip).parse::<SocketAddr>() {
-            Ok(addr) => addr,
-            Err(_) => continue,
-        };
-
-        match TcpStream::connect_timeout(&addr, Duration::from_millis(100)) {
-            Ok(_) => {
-                printers.push(ZplPrinter::new(ip, 9100));
-            }
-            Err(_) => continue,
-        }
-    }
-
-    printers
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn scan_for_printers() -> Vec<ZplPrinter> {
-    Vec::new()
-}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn send_to_printer(printer: &ZplPrinter, zpl: &str) -> Result<(), String> {

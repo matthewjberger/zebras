@@ -1,35 +1,27 @@
-use enum2str::EnumStr;
 use image::{DynamicImage, GenericImageView, Rgba};
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[allow(dead_code)]
-#[derive(EnumStr, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum ZplPrefix {
-    #[enum2str("^")]
     Caret,
-    #[enum2str("~")]
     Tilde,
 }
 
 #[allow(dead_code)]
-#[derive(EnumStr, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ZplCommand {
-    #[enum2str("XA")]
     StartFormat,
-    #[enum2str("XZ")]
     EndFormat,
-    #[enum2str("FO")]
     FieldOrigin { x: u32, y: u32 },
-    #[enum2str("A0")]
     Font {
         orientation: FontOrientation,
         height: u32,
         width: u32,
     },
-    #[enum2str("FD")]
     FieldData { data: String },
-    #[enum2str("FS")]
     FieldSeparator,
-    #[enum2str("GB")]
     GraphicBox {
         width: u32,
         height: u32,
@@ -37,13 +29,9 @@ pub enum ZplCommand {
         color: Option<char>,
         rounding: Option<u8>,
     },
-    #[enum2str("CF")]
     ChangeFont { font: String, size: u32 },
-    #[enum2str("FW")]
     FieldOrientation { rotation: FieldRotation },
-    #[enum2str("BY")]
     BarcodeFieldDefault { width: u32, ratio: f32, height: u32 },
-    #[enum2str("BC")]
     Code128Barcode {
         orientation: FieldOrientation,
         height: u32,
@@ -52,17 +40,24 @@ pub enum ZplCommand {
         check_digit: bool,
         mode: FieldOrientation,
     },
-    #[enum2str("GFA")]
     GraphicField {
         width: u32,
         height: u32,
         data: String,
     },
-    #[enum2str("MMD")]
+    DownloadGraphic {
+        name: String,
+        width: u32,
+        height: u32,
+        data: String,
+    },
+    RecallGraphic {
+        name: String,
+        magnification_x: u32,
+        magnification_y: u32,
+    },
     MediaModeDelayed,
-    #[enum2str("MMT")]
     MediaModeTearOff,
-    #[enum2str("JK")]
     CutNow,
 }
 
@@ -81,6 +76,8 @@ impl ZplCommand {
             ZplCommand::BarcodeFieldDefault { .. } => "Barcode Field Default (^BY)",
             ZplCommand::Code128Barcode { .. } => "Code 128 Barcode (^BC)",
             ZplCommand::GraphicField { .. } => "Graphic Field (^GFA)",
+            ZplCommand::DownloadGraphic { .. } => "Download Graphic (~DG)",
+            ZplCommand::RecallGraphic { .. } => "Recall Graphic (^XG)",
             ZplCommand::MediaModeDelayed => "Media Mode Delayed (^MMD)",
             ZplCommand::MediaModeTearOff => "Media Mode Tear-off (^MMT)",
             ZplCommand::CutNow => "Cut Now (~JK)",
@@ -126,6 +123,23 @@ impl ZplCommand {
                     width: 32,
                     height: 32,
                     data: String::new(),
+                },
+            ),
+            (
+                "Download Graphic (~DG)",
+                ZplCommand::DownloadGraphic {
+                    name: "GRAPHIC".to_string(),
+                    width: 32,
+                    height: 32,
+                    data: String::new(),
+                },
+            ),
+            (
+                "Recall Graphic (^XG)",
+                ZplCommand::RecallGraphic {
+                    name: "GRAPHIC".to_string(),
+                    magnification_x: 1,
+                    magnification_y: 1,
                 },
             ),
         ]
@@ -190,6 +204,15 @@ impl ZplCommand {
                 let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
                 format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
             }
+            ZplCommand::DownloadGraphic { name, width, height, data } => {
+                let bytes_per_row = (width + 7) / 8;
+                let total_bytes = bytes_per_row * height;
+                let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
+                format!("~DG{},{},{},{}", name, total_bytes, bytes_per_row, clean_data)
+            }
+            ZplCommand::RecallGraphic { name, magnification_x, magnification_y } => {
+                format!("^XG{},{},{}", name, magnification_x, magnification_y)
+            }
             ZplCommand::MediaModeDelayed => "^MMD".to_string(),
             ZplCommand::MediaModeTearOff => "^MMT".to_string(),
             ZplCommand::CutNow => "~JK".to_string(),
@@ -211,40 +234,61 @@ pub fn commands_to_zpl(commands: &[ZplCommand]) -> String {
         .join("\n")
 }
 
-#[derive(EnumStr, Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum FontOrientation {
-    #[enum2str("N")]
     Normal,
-    #[enum2str("R")]
     Rotated90,
-    #[enum2str("I")]
     Rotated180,
-    #[enum2str("B")]
     Rotated270,
 }
 
-#[derive(EnumStr, Debug, Clone, Copy, PartialEq)]
+impl fmt::Display for FontOrientation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FontOrientation::Normal => write!(f, "N"),
+            FontOrientation::Rotated90 => write!(f, "R"),
+            FontOrientation::Rotated180 => write!(f, "I"),
+            FontOrientation::Rotated270 => write!(f, "B"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum FieldOrientation {
-    #[enum2str("N")]
     Normal,
-    #[enum2str("R")]
     Rotated90,
-    #[enum2str("I")]
     Rotated180,
-    #[enum2str("B")]
     Rotated270,
 }
 
-#[derive(EnumStr, Debug, Clone, Copy, PartialEq)]
+impl fmt::Display for FieldOrientation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FieldOrientation::Normal => write!(f, "N"),
+            FieldOrientation::Rotated90 => write!(f, "R"),
+            FieldOrientation::Rotated180 => write!(f, "I"),
+            FieldOrientation::Rotated270 => write!(f, "B"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum FieldRotation {
-    #[enum2str("N")]
     Normal,
-    #[enum2str("R")]
     Rotated90,
-    #[enum2str("I")]
     Rotated180,
-    #[enum2str("B")]
     Rotated270,
+}
+
+impl fmt::Display for FieldRotation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FieldRotation::Normal => write!(f, "N"),
+            FieldRotation::Rotated90 => write!(f, "R"),
+            FieldRotation::Rotated180 => write!(f, "I"),
+            FieldRotation::Rotated270 => write!(f, "B"),
+        }
+    }
 }
 
 pub struct ZplLabel {
@@ -374,6 +418,15 @@ impl ZplLabel {
                     let total_bytes = bytes_per_row * height;
                     let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
                     format!("^GFA,{},{},{},{}", total_bytes, total_bytes, bytes_per_row, clean_data)
+                }
+                ZplCommand::DownloadGraphic { name, width, height, data } => {
+                    let bytes_per_row = (width + 7) / 8;
+                    let total_bytes = bytes_per_row * height;
+                    let clean_data = data.replace(",", "").replace(" ", "").replace("\n", "").replace("\r", "").to_uppercase();
+                    format!("~DG{},{},{},{}", name, total_bytes, bytes_per_row, clean_data)
+                }
+                ZplCommand::RecallGraphic { name, magnification_x, magnification_y } => {
+                    format!("^XG{},{},{}", name, magnification_x, magnification_y)
                 }
                 ZplCommand::MediaModeDelayed => format!("^MMD"),
                 ZplCommand::MediaModeTearOff => format!("^MMT"),

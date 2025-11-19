@@ -14,6 +14,7 @@ pub struct PrinterInfo {
     pub firmware_version: Option<String>,
     pub battery_capacity: Option<BatteryInfo>,
     pub label_dimensions: Option<LabelDimensions>,
+    pub memory_status: Option<MemoryStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,6 +69,13 @@ pub struct BatteryInfo {
 pub struct LabelDimensions {
     pub width: String,
     pub height: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MemoryStatus {
+    pub total_ram_kb: u32,
+    pub max_available_kb: u32,
+    pub current_available_kb: u32,
 }
 
 impl PrinterInfo {
@@ -251,6 +259,25 @@ impl PrinterInfo {
         let cleaned = response.trim();
         if !cleaned.is_empty() {
             Some(cleaned.to_string())
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_memory_status(response: &str) -> Option<MemoryStatus> {
+        let line = response.lines().next()?.trim();
+        let parts: Vec<&str> = line.split(',').collect();
+
+        if parts.len() == 3 {
+            let total_ram = parts[0].trim().parse::<u32>().ok()?;
+            let max_available = parts[1].trim().parse::<u32>().ok()?;
+            let current_available = parts[2].trim().parse::<u32>().ok()?;
+
+            Some(MemoryStatus {
+                total_ram_kb: total_ram,
+                max_available_kb: max_available,
+                current_available_kb: current_available,
+            })
         } else {
             None
         }

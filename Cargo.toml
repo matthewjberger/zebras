@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-nightshade = "0.6.9"
+eframe = "0.29"
+egui = "0.29"
 image = "0.25"
-enum2str = "0.1.18"
 rfd = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = { version = "0.12", features = ["blocking", "multipart"] }

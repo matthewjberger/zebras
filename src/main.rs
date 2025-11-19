@@ -1,16 +1,18 @@
-extern crate alloc;
-
 mod app;
-mod labelary;
-mod printer;
-mod printer_status;
-mod zpl;
-
-use nightshade::prelude::*;
 
 use app::Zebras;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    launch(Zebras::default())?;
-    Ok(())
+fn main() -> Result<(), eframe::Error> {
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1400.0, 900.0])
+            .with_title("Zebras - ZPL Simulator"),
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "Zebras",
+        options,
+        Box::new(|_cc| Ok(Box::new(Zebras::default()))),
+    )
 }
