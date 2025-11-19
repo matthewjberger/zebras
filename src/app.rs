@@ -70,14 +70,14 @@ impl Default for Zebras {
                 data: "BURRITO BOWL".to_string(),
             },
             ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 50, y: 30 },
+            ZplCommand::FieldOrigin { x: 10, y: 30 },
             ZplCommand::GraphicField {
                 width: 400,
                 height: 86,
                 data: logo_hex,
             },
             ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 150, y: 125 },
+            ZplCommand::FieldOrigin { x: 100, y: 125 },
             ZplCommand::Font {
                 orientation: FontOrientation::Normal,
                 height: 30,
@@ -85,6 +85,86 @@ impl Default for Zebras {
             },
             ZplCommand::FieldData {
                 data: "11/19/25".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 100, y: 170 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 35,
+                width: 35,
+            },
+            ZplCommand::FieldData {
+                data: "Bowl #1 (7 Ingredients)".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 120, y: 250 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: "* White Rice".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 120, y: 300 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: "* Black Beans".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 120, y: 350 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: "* Fajita Veggies".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 120, y: 400 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: "* Chicken".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 450, y: 250 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: "* Hot Red Salsa".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 450, y: 300 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: "* Corn Salsa".to_string(),
+            },
+            ZplCommand::FieldSeparator,
+            ZplCommand::FieldOrigin { x: 450, y: 350 },
+            ZplCommand::Font {
+                orientation: FontOrientation::Normal,
+                height: 40,
+                width: 30,
+            },
+            ZplCommand::FieldData {
+                data: "* Romaine Lettuce".to_string(),
             },
             ZplCommand::FieldSeparator,
             ZplCommand::EndFormat,
@@ -471,14 +551,14 @@ impl Zebras {
                             data: "BURRITO BOWL".to_string(),
                         },
                         ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 50, y: 30 },
+                        ZplCommand::FieldOrigin { x: 10, y: 30 },
                         ZplCommand::GraphicField {
                             width: 400,
                             height: 86,
                             data: logo_hex,
                         },
                         ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 150, y: 125 },
+                        ZplCommand::FieldOrigin { x: 100, y: 125 },
                         ZplCommand::Font {
                             orientation: FontOrientation::Normal,
                             height: 30,
@@ -486,6 +566,86 @@ impl Zebras {
                         },
                         ZplCommand::FieldData {
                             data: "11/19/25".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 100, y: 170 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 35,
+                            width: 35,
+                        },
+                        ZplCommand::FieldData {
+                            data: "Bowl #1 (7 Ingredients)".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 120, y: 250 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "* White Rice".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 120, y: 300 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "* Black Beans".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 120, y: 350 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "* Fajita Veggies".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 120, y: 400 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "* Chicken".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 450, y: 250 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "* Hot Red Salsa".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 450, y: 300 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "* Corn Salsa".to_string(),
+                        },
+                        ZplCommand::FieldSeparator,
+                        ZplCommand::FieldOrigin { x: 450, y: 350 },
+                        ZplCommand::Font {
+                            orientation: FontOrientation::Normal,
+                            height: 40,
+                            width: 30,
+                        },
+                        ZplCommand::FieldData {
+                            data: "* Romaine Lettuce".to_string(),
                         },
                         ZplCommand::FieldSeparator,
                         ZplCommand::EndFormat,
@@ -1118,6 +1278,54 @@ impl Zebras {
                         }
                         ui.label("Mag Y:");
                         if ui.add(egui::DragValue::new(magnification_y).speed(1).range(1..=10)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                });
+            }
+            ZplCommand::FieldBlock {
+                width,
+                max_lines,
+                line_spacing,
+                justification,
+            } => {
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Width:");
+                        if ui.add(egui::DragValue::new(width).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                        ui.label("Max Lines:");
+                        if ui.add(egui::DragValue::new(max_lines).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Line Spacing:");
+                        if ui.add(egui::DragValue::new(line_spacing).speed(1)).lost_focus() {
+                            self.is_dirty = true;
+                        }
+                        ui.label("Justify:");
+                        let mut justify_selection = match *justification {
+                            'L' => 0,
+                            'C' => 1,
+                            'R' => 2,
+                            'J' => 3,
+                            _ => 1,
+                        };
+                        let prev_selection = justify_selection;
+                        ui.radio_value(&mut justify_selection, 0, "Left");
+                        ui.radio_value(&mut justify_selection, 1, "Center");
+                        ui.radio_value(&mut justify_selection, 2, "Right");
+                        ui.radio_value(&mut justify_selection, 3, "Justify");
+                        if justify_selection != prev_selection {
+                            *justification = match justify_selection {
+                                0 => 'L',
+                                1 => 'C',
+                                2 => 'R',
+                                3 => 'J',
+                                _ => 'C',
+                            };
                             self.is_dirty = true;
                         }
                     });
@@ -1764,8 +1972,10 @@ impl eframe::App for Zebras {
 
                             ui.separator();
 
+                            let available_height = ui.available_height();
                             egui::ScrollArea::vertical()
                                 .auto_shrink([false, false])
+                                .max_height(available_height)
                                 .show(ui, |ui| {
                                     let mut to_remove = None;
                                     let mut to_move_up = None;

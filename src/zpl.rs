@@ -73,6 +73,12 @@ pub enum ZplCommand {
     MediaModeDelayed,
     MediaModeTearOff,
     CutNow,
+    FieldBlock {
+        width: u32,
+        max_lines: u32,
+        line_spacing: i32,
+        justification: char,
+    },
 }
 
 impl ZplCommand {
@@ -95,6 +101,7 @@ impl ZplCommand {
             ZplCommand::MediaModeDelayed => "Media Mode Delayed (^MMD)",
             ZplCommand::MediaModeTearOff => "Media Mode Tear-off (^MMT)",
             ZplCommand::CutNow => "Cut Now (~JK)",
+            ZplCommand::FieldBlock { .. } => "Field Block (^FB)",
         }
     }
 
@@ -151,6 +158,15 @@ impl ZplCommand {
                     name: "GRAPHIC".to_string(),
                     magnification_x: 1,
                     magnification_y: 1,
+                },
+            ),
+            (
+                "Field Block (^FB)",
+                ZplCommand::FieldBlock {
+                    width: 400,
+                    max_lines: 10,
+                    line_spacing: 0,
+                    justification: 'C',
                 },
             ),
         ]
@@ -256,6 +272,12 @@ impl ZplCommand {
             ZplCommand::MediaModeDelayed => "^MMD".to_string(),
             ZplCommand::MediaModeTearOff => "^MMT".to_string(),
             ZplCommand::CutNow => "~JK".to_string(),
+            ZplCommand::FieldBlock {
+                width,
+                max_lines,
+                line_spacing,
+                justification,
+            } => format!("^FB{},{},{},{}", width, max_lines, line_spacing, justification),
         }
     }
 }
@@ -500,6 +522,12 @@ impl ZplLabel {
                 ZplCommand::MediaModeDelayed => format!("^MMD"),
                 ZplCommand::MediaModeTearOff => format!("^MMT"),
                 ZplCommand::CutNow => format!("~JK"),
+                ZplCommand::FieldBlock {
+                    width,
+                    max_lines,
+                    line_spacing,
+                    justification,
+                } => format!("^FB{},{},{},{}", width, max_lines, line_spacing, justification),
             })
             .collect::<Vec<_>>()
             .join("\n")
