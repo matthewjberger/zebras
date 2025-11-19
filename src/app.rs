@@ -216,6 +216,59 @@ impl Zebras {
         self.is_dirty = true;
     }
 
+    fn randomize_ingredients(&mut self) {
+        let all_ingredients = vec![
+            "* White Rice",
+            "* Brown Rice",
+            "* Black Beans",
+            "* Pinto Beans",
+            "* Fajita Veggies",
+            "* Chicken",
+            "* Steak",
+            "* Carnitas",
+            "* Barbacoa",
+            "* Sofritas",
+            "* Hot Red Salsa",
+            "* Medium Green Salsa",
+            "* Mild Tomato Salsa",
+            "* Corn Salsa",
+            "* Sour Cream",
+            "* Cheese",
+            "* Guacamole",
+            "* Romaine Lettuce",
+            "* Queso Blanco",
+            "* Cilantro Lime Rice",
+        ];
+
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let ingredient_count = 3 + (seed % 12) as usize;
+
+        let mut selected_indices = Vec::new();
+        for index in 0..all_ingredients.len() {
+            let hash = seed.wrapping_mul(31).wrapping_add(index as u64);
+            selected_indices.push((hash, index));
+        }
+        selected_indices.sort_by_key(|(hash, _)| *hash);
+
+        self.label_config.ingredients = selected_indices
+            .iter()
+            .take(ingredient_count)
+            .map(|(_, index)| all_ingredients[*index].to_string())
+            .collect();
+
+        self.label_config.bowl_description = format!("Bowl #{} ({} Ingredients)",
+            (seed % 100) + 1,
+            ingredient_count
+        );
+
+        self.apply_label_config();
+    }
+
     fn get_zpl_text(&self) -> String {
         if self.raw_zpl_mode {
             self.raw_zpl_input.clone()
@@ -1165,7 +1218,7 @@ impl eframe::App for Zebras {
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Burrito Bowl Label Designer");
+                ui.heading("Label Maker");
                 ui.separator();
 
                 if ui.button("Save Template").clicked() {
@@ -1334,6 +1387,9 @@ impl eframe::App for Zebras {
                     if ui.button("Add Ingredient").clicked() {
                         self.label_config.ingredients.push("* New Ingredient".to_string());
                         self.apply_label_config();
+                    }
+                    if ui.button("Randomize Ingredients").clicked() {
+                        self.randomize_ingredients();
                     }
                 });
 
