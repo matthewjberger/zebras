@@ -70,14 +70,14 @@ impl Default for Zebras {
                 data: "BURRITO BOWL".to_string(),
             },
             ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 0, y: 30 },
+            ZplCommand::FieldOrigin { x: 50, y: 30 },
             ZplCommand::GraphicField {
                 width: 400,
                 height: 86,
                 data: logo_hex,
             },
             ZplCommand::FieldSeparator,
-            ZplCommand::FieldOrigin { x: 50, y: 125 },
+            ZplCommand::FieldOrigin { x: 150, y: 125 },
             ZplCommand::Font {
                 orientation: FontOrientation::Normal,
                 height: 30,
@@ -471,14 +471,14 @@ impl Zebras {
                             data: "BURRITO BOWL".to_string(),
                         },
                         ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 0, y: 30 },
+                        ZplCommand::FieldOrigin { x: 50, y: 30 },
                         ZplCommand::GraphicField {
                             width: 400,
                             height: 86,
                             data: logo_hex,
                         },
                         ZplCommand::FieldSeparator,
-                        ZplCommand::FieldOrigin { x: 50, y: 125 },
+                        ZplCommand::FieldOrigin { x: 150, y: 125 },
                         ZplCommand::Font {
                             orientation: FontOrientation::Normal,
                             height: 30,
